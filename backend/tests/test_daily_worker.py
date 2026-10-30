@@ -243,3 +243,25 @@ def test_photo_posts_skip_items_without_real_source_image(sessions, monkeypatch)
     settings = DailySettings(enabled=True, post_enabled=True, channel="@mychannel", token="test-only")
     result = asyncio.run(run_cycle(settings, now=NOW, sessions=sessions, collector=collect, importer=importer))
     assert result["status"] == "empty"
+
+
+def test_catalog_refresh_claims_separate_tashkent_two_hour_slots(sessions):
+    settings = DailySettings(enabled=True, post_enabled=False, collection_interval_hours=2)
+    first = datetime(2026, 10, 30, 6, 30, tzinfo=timezone.utc)  # 11:30 Tashkent
+    second = first + timedelta(minutes=20)  # same 10:00-11:59 slot
+    third = first + timedelta(minutes=40)  # 12:10 new local slot
+    first_key, _, _ = day_key(first, settings)
+    assert first_key == day_key(second, settings)[0]
+    assert first_key != day_key(third, settings)[0]
+    assert claim_day(sessions, first, settings)[0] is not None
+    assert claim_day(sessions, second, settings) == (None, "collecting")
+    assert claim_day(sessions, third, settings)[0] is not None
+    assert day_key(first, DailySettings(post_enabled=True, channel="@mychannel"))[0] == day_key(third, DailySettings(post_enabled=True, channel="@mychannel"))[0]
+
+
+def test_catalog_refresh_interval_env_validation(monkeypatch):
+    monkeypatch.setenv("COLLECTION_INTERVAL_HOURS", "2")
+    assert DailySettings.from_env().collection_interval_hours == 2
+    monkeypatch.setenv("COLLECTION_INTERVAL_HOURS", "5")
+    with pytest.raises(ValueError, match="COLLECTION_INTERVAL_HOURS"):
+        DailySettings.from_env()
