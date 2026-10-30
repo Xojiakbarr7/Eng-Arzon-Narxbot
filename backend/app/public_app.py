@@ -20,10 +20,10 @@ class TelegramMiniAppGateway:
         if scope["type"] != "http":
             return await self.core(scope, receive, send)
         path = scope.get("path", "/")
-        if path.startswith(("/api/admin", "/api/internal")) or path in ("/docs", "/redoc", "/openapi.json"):
+        if path.startswith("/api/internal") or path in ("/docs", "/redoc", "/openapi.json"):
             return await JSONResponse({"detail": "Topilmadi"}, status_code=404)(scope, receive, send)
         if path.startswith("/api/"):
-            if path != "/api/health":
+            if path != "/api/health" and not (path.startswith("/api/admin") and Headers(scope=scope).get("authorization", "").startswith("Bearer ")):
                 try:
                     validate_init_data(Headers(scope=scope).get("x-telegram-init-data", ""), self.token, self.ttl)
                 except (ValueError, KeyError, TypeError):
