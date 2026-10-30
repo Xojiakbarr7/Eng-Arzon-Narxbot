@@ -4,6 +4,8 @@ Restored after a GitHub web upload flattened the original directory structure.
 Business logic lives in services.py, seed.py, imports.py and security.py.
 """
 from contextlib import asynccontextmanager
+import asyncio
+import logging
 from datetime import timedelta
 import re
 
@@ -27,6 +29,7 @@ from .schemas import (
 )
 from .security import current_user, require_admin, require_internal
 from .telegram_webhook import enable_webhook, disable_webhook, telegram_update
+from .daily_worker import DailySettings, serve, flag
 from .seed import seed_catalog
 from .services import (
     REGIONS, aware, history_for, is_stale, optimize_basket,
@@ -45,9 +48,23 @@ async def lifespan(application: FastAPI):
     with SessionLocal() as db:
         seed_catalog(db, get_settings().demo_mode)
     await enable_webhook(application)
+    daily_task = None
+    if flag(__import__("os").getenv("COLLECTION_ENABLED", "false")):
+        try:
+            daily_settings = DailySettings.from_env()
+            daily_task = asyncio.create_task(serve(daily_settings))
+            logging.getLogger("eng_arzon.daily").info("Daily collection scheduled for %02d:%02d Tashkent", daily_settings.hour, daily_settings.minute)
+        except (ValueError, TypeError) as exc:
+            logging.getLogger("eng_arzon.daily").error("Daily collection configuration invalid: %s", type(exc).__name__)
     try:
         yield
     finally:
+        if daily_task is not None:
+            daily_task.cancel()
+            try:
+                await daily_task
+            except asyncio.CancelledError:
+                pass
         await disable_webhook(application)
 
 
