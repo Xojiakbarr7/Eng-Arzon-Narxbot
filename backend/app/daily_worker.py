@@ -8,7 +8,7 @@ empty results likewise remain recorded until the next day or manual review.
 import argparse
 import asyncio
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 from html import escape
 import json
@@ -47,6 +47,7 @@ class DailySettings:
     minute: int = 0
     max_items: int = 10
     interval_seconds: int = 60
+    collection_interval_hours: int = 2
     config_path: str = str(Path(__file__).resolve().parents[1] / "collection-sources.json")
     token: str = ""
 
@@ -62,8 +63,12 @@ class DailySettings:
         token = os.getenv("BOT_TOKEN", "").strip()
         if posts and (not re.fullmatch(r"(?:@[A-Za-z][A-Za-z0-9_]{4,31}|-100\d{5,})", channel) or not token):
             raise ValueError("Kanalga yuborish uchun DAILY_CHANNEL_ID va BOT_TOKEN kerak")
+        collection_interval = int(os.getenv("COLLECTION_INTERVAL_HOURS", "2"))
+        if collection_interval not in (1, 2, 3, 4, 6, 8, 12, 24):
+            raise ValueError("COLLECTION_INTERVAL_HOURS 1,2,3,4,6,8,12 yoki 24 bo‘lsin")
         return cls(
             enabled=enabled, post_enabled=posts, channel=channel,
+            collection_interval_hours=collection_interval,
             hour=hour, minute=minute,
             max_items=max(1, min(10, int(os.getenv("DAILY_MAX_ITEMS", "10")))),
             interval_seconds=max(30, int(os.getenv("COLLECTION_POLL_SECONDS", "60"))),
@@ -77,9 +82,15 @@ def is_due(now, settings):
 
 
 def day_key(now, settings):
-    day = aware(now).astimezone(TASHKENT).date().isoformat()
+    local = aware(now).astimezone(TASHKENT)
+    day = local.date().isoformat()
     destination = settings.channel if settings.post_enabled else "catalog"
-    return f"{day}:{destination}", day, destination
+    if settings.post_enabled:
+        # Channel posts stay once a day, not 12 times daily.
+        return f"{day}:{destination}", day, destination
+    # A unique DB claim per two-hour wall-clock slot, in Tashkent time.
+    slot = local.hour // settings.collection_interval_hours
+    return f"{day}:slot-{slot:02d}:{destination}", day, destination
 
 
 def claim_day(sessions, now, settings):
@@ -246,7 +257,9 @@ async def run_cycle(settings, *, now=None, sessions=SessionLocal, collector=None
     if run_id is None:
         return {"status": "skipped", "previous": state}
     try:
+        log.warning("Catalog collecting source pages for %s", day_key(now, settings)[0])
         items, reports = await collector(settings.config_path)
+        log.warning("Catalog collection completed: items=%d sources=%s", len(items), json.dumps(reports, ensure_ascii=True)[:1400])
         if importer is None:
             from .collection_ingest import import_observations
             importer = import_observations
@@ -257,6 +270,7 @@ async def run_cycle(settings, *, now=None, sessions=SessionLocal, collector=None
             deals = select_deals(db, stats.get("product_ids", []), completed_at, settings.max_items)
         postable = [deal for deal in deals if safe_image_url(deal.get("image_url"))]
         message = render_digest(deals, completed_at)
+        log.warning("Catalog import: imported=%d, selected=%d", stats.get("imported", 0), len(deals))
         state = "ready" if (message if publisher is not None or not settings.post_enabled else postable) else "empty"
         set_state(sessions, run_id, state, completed_at, item_count=len(postable) if settings.post_enabled and publisher is None else len(deals), message=message, source_report=reports)
     except Exception as exc:
@@ -298,14 +312,26 @@ async def run_cycle(settings, *, now=None, sessions=SessionLocal, collector=None
 
 
 async def serve(settings):
-    previous = None
+    previous = {}
+    # The Mini App collector always runs in 2-hour slots. Channel posting,
+    # when enabled separately, remains a once-daily job.
+    catalog_settings = replace(settings, post_enabled=False)
     while True:
-        if is_due(utcnow(), settings):
-            result = await run_cycle(settings)
-            summary = (result["status"], result.get("previous"))
-            if summary != previous:
-                log.info("Daily worker: %s", json.dumps(result, ensure_ascii=True))
-                previous = summary
+        for task, active_settings in (("catalog", catalog_settings), ("channel", settings)):
+            if task == "channel" and (not settings.post_enabled or not is_due(utcnow(), settings)):
+                continue
+            slot_key = day_key(utcnow(), active_settings)[0]
+            if previous.get(task, (None, None))[0] == slot_key:
+                continue
+            try:
+                result = await run_cycle(active_settings)
+                # Avoid excess log entries on each minute poll.
+                log.warning("Catalog scheduler %s %s: %s", task, slot_key, json.dumps(result, ensure_ascii=True)[:1800])
+                previous[task] = (slot_key, result.get("status"))
+            except Exception:
+                # Do not prevent a future slot from running on a transient failure.
+                log.exception("Catalog scheduler failed for %s", slot_key)
+                previous[task] = (slot_key, "failed")
         await asyncio.sleep(settings.interval_seconds)
 
 
