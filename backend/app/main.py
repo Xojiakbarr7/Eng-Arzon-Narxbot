@@ -19,7 +19,7 @@ from .config import get_settings
 from .db import Base, SessionLocal, engine, get_db
 from .imports import import_csv
 from .models import (
-    AuditLog, Category, Favorite, ImportJob, NotificationHistory, Offer,
+    AuditLog, Category, DailyRun, Favorite, ImportJob, NotificationHistory, Offer,
     PriceAlert, PriceHistory, Product, SearchHistory, Store, User, utcnow,
 )
 from .schemas import (
@@ -119,6 +119,25 @@ def alert_row(db: Session, row: PriceAlert):
 @app.get("/api/health")
 def health():
     return {"status": "ok", "ok": True, "demo_mode": get_settings().demo_mode, "telegram_webhook": bool(getattr(app.state, "telegram_bot", None))}
+
+
+@app.get("/api/catalog/status")
+def catalog_status(db: Session = Depends(get_db)):
+    # Public, aggregate-only telemetry. Never return source URLs or credentials.
+    product_count = db.scalar(select(func.count()).select_from(Product).where(Product.is_demo.is_(False))) or 0
+    available_count = db.scalar(
+        select(func.count(func.distinct(Product.id)))
+        .select_from(Product).join(Offer, Offer.product_id == Product.id)
+        .where(Product.is_demo.is_(False), Offer.is_demo.is_(False), Offer.in_stock.is_(True))
+    ) or 0
+    latest = db.scalar(select(DailyRun).where(DailyRun.destination == "catalog").order_by(DailyRun.created_at.desc(), DailyRun.id.desc()).limit(1))
+    return {
+        "real_products": product_count,
+        "products_with_offers": available_count,
+        "refresh_interval_hours": 2,
+        "last_refresh_status": latest.status if latest else "not_started",
+        "last_refresh_at": aware(latest.updated_at).isoformat() if latest else None,
+    }
 
 
 @app.post("/telegram/webhook", include_in_schema=False)
