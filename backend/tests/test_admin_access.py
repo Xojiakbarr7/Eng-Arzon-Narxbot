@@ -27,9 +27,10 @@ def test_admin_authorization(monkeypatch):
     monkeypatch.setattr(s, "bot_internal_token", "another-long-internal-token")
     assert is_admin_user(123)
     assert not is_admin_user(124)
-    assert require_admin(authorization="Bearer a-secret-token-with-32-characters")
-    assert require_admin(x_telegram_init_data=signed_telegram(123, s.bot_token))
-    assert require_admin(x_bot_token=s.bot_internal_token, x_telegram_user_id="123")
+    blank = dict(authorization="", x_telegram_init_data="", x_bot_token="", x_telegram_user_id="")
+    assert require_admin(**{**blank, "authorization": "Bearer a-secret-token-with-32-characters"})
+    assert require_admin(**{**blank, "x_telegram_init_data": signed_telegram(123, s.bot_token)})
+    assert require_admin(**{**blank, "x_bot_token": s.bot_internal_token, "x_telegram_user_id": "123"})
     for headers in (
         {},
         {"x_telegram_init_data": signed_telegram(124, s.bot_token)},
