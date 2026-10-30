@@ -141,10 +141,14 @@ def observation(source, product, offer, category, now):
     elif source == "uzum":
         sku_ids = [value for key, value in parse_qsl(urlparse(url).query) if key == "skuId"]
         if len(sku_ids) == 1 and sku_ids[0].isdigit(): reference = "sku:" + sku_ids[0]
+    if isinstance(image, str) and image.strip():
+        image = urljoin(url, image.strip())
+    else:
+        image = None
     return CollectedItem(source=source, reference=reference, name=name, price=int(price), url=url, category_slug=category,
                          observed_at=now, in_stock=available == "InStock", brand=scalar_name(product.get("brand"))[:80],
                          model=str(product.get("model") or product.get("mpn") or "")[:120], attributes=attrs,
-                         barcode=barcode, image_url=str(image) if image and str(image).startswith("https://") else None)
+                         barcode=barcode, image_url=image if image and urlparse(image).scheme == "https" else None)
 
 
 def parse_page(source, html, page_url, category, now=None):
