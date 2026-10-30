@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 from datetime import timedelta
 import re
 
-from fastapi import Depends, FastAPI, HTTPException, Query, Response
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -25,6 +25,7 @@ from .schemas import (
     ProfileUpdate, StoreUpdate,
 )
 from .security import current_user, require_admin, require_internal
+from .telegram_webhook import enable_webhook, disable_webhook, telegram_update
 from .seed import seed_catalog
 from .services import (
     REGIONS, aware, history_for, is_stale, optimize_basket,
@@ -42,7 +43,11 @@ async def lifespan(application: FastAPI):
     Base.metadata.create_all(bind=engine)
     with SessionLocal() as db:
         seed_catalog(db, get_settings().demo_mode)
-    yield
+    await enable_webhook(application)
+    try:
+        yield
+    finally:
+        await disable_webhook(application)
 
 
 app = FastAPI(
@@ -84,7 +89,12 @@ def alert_row(db: Session, row: PriceAlert):
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "ok": True, "demo_mode": get_settings().demo_mode}
+    return {"status": "ok", "ok": True, "demo_mode": get_settings().demo_mode, "telegram_webhook": bool(getattr(app.state, "telegram_bot", None))}
+
+
+@app.post("/telegram/webhook", include_in_schema=False)
+async def telegram_webhook_route(request: Request):
+    return await telegram_update(request)
 
 
 @app.get("/api/categories")
