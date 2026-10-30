@@ -274,7 +274,21 @@ async def collect_sources(config_path):
                             if len(report["failed_paths"]) < 20: report["failed_paths"].append(urlparse(url).path)
                 results.extend(accepted.values()); report["items"] = len(accepted)
                 if not accepted: report["errors"].append("no_structured_new_offers")
-            except (httpx.HTTPError, ValueError, KeyError, TypeError, SourceUnavailable):
-                report["errors"].append("source_unavailable_or_invalid_config")
+            except (httpx.HTTPError, ValueError, KeyError, TypeError, SourceUnavailable) as exc:
+                # Report only the safe error class/code, not response contents or URLs.
+                reason = "source_unavailable_or_invalid_config"
+                if isinstance(exc, SourceUnavailable):
+                    reason = "source_access_limited"
+                elif isinstance(exc, ValueError) and str(exc).startswith("HTTP "):
+                    code = str(exc).split(" ", 1)[1]
+                    if code.isdecimal():
+                        reason = "source_http_" + code
+                elif isinstance(exc, httpx.ConnectError):
+                    reason = "source_connection_failed"
+                elif isinstance(exc, httpx.TimeoutException):
+                    reason = "source_timed_out"
+                elif isinstance(exc, httpx.HTTPError):
+                    reason = "source_network_error"
+                report["errors"].append(reason)
             reports.append(report)
     return results, reports
