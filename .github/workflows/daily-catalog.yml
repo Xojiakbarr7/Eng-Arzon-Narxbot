@@ -1,7 +1,5 @@
-"""Wake free Render web service for the daily 09:00 Asia/Tashkent collector.
-GitHub Actions schedules can be delayed. Actual collection is guarded by
-a persisted daily_runs claim to prevent a duplicate day's channel posts.
-"""
+# Wake Render around 09:05 Asia/Tashkent daily.
+# The DB's daily_runs unique claim guards against duplicate postings.
 name: Wake daily product collector
 on:
   schedule:
