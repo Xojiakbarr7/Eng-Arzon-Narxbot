@@ -66,14 +66,17 @@ def price_insight(history, current_price, is_demo=False):
 
 def product_summary(db, product, user_id=None):
     offers = usable_offers(db, product.id)
-    minimum = min((o.price for o in offers), default=None)
+    best_offer = min(offers, key=lambda o: (o.price, o.id), default=None)
+    minimum = best_offer.price if best_offer is not None else None
     history = history_for(db, product.id, 30)
     previous = [p["price"] for p in history if p["date"] < utcnow().date().isoformat()]
     reference = median(previous) if len(previous) >= 7 else None
     discount = max(0, round((1 - minimum / reference) * 100)) if reference and minimum else 0
     category = db.get(Category, product.category_id)
     favorite = bool(user_id and db.scalar(select(Favorite.id).where(Favorite.user_id == user_id, Favorite.product_id == product.id)))
-    return {"id": product.id, "name": product.name, "slug": product.slug, "brand": product.brand, "model": product.model, "category_id": product.category_id, "category_name": category.name if category else "", "description": product.description, "image_url": product.image_url, "emoji": product.emoji, "attributes": {k: v for k, v in product.attributes.items() if not k.startswith("_")}, "barcode": product.barcode, "min_price": minimum, "old_price": round(reference) if discount else None, "store_count": len(offers), "is_demo": product.is_demo, "discount_percent": discount, "favorite": favorite}
+    best_store = db.get(Store, best_offer.store_id) if best_offer else None
+    buy_url = best_offer.url if best_offer and best_store and best_offer.url and best_offer.url.startswith("https://") and not best_offer.is_demo else None
+    return {"id": product.id, "name": product.name, "slug": product.slug, "brand": product.brand, "model": product.model, "category_id": product.category_id, "category_name": category.name if category else "", "description": product.description, "image_url": product.image_url, "emoji": product.emoji, "attributes": {k: v for k, v in product.attributes.items() if not k.startswith("_")}, "barcode": product.barcode, "min_price": minimum, "old_price": round(reference) if discount else None, "buy_url": buy_url, "buy_store": best_store.name if buy_url else None, "store_count": len(offers), "is_demo": product.is_demo, "discount_percent": discount, "favorite": favorite}
 
 
 def delivery(store, subtotal, region="tashkent"):
