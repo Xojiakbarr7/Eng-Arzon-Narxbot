@@ -234,7 +234,14 @@ async def collect_sources(config_path):
                                  headers={"User-Agent": USER_AGENT}, limits=httpx.Limits(max_connections=2)) as client:
         for source_config in config.get("sources", []):
             source = source_config.get("source")
-            if source not in HOSTS or not source_config.get("enabled", False): continue
+            if not source_config.get("enabled", False): continue
+            if source == "olcha":
+                from .olcha_source import collect_olcha
+                products, report = await collect_olcha(source_config, delay=delay, max_items=item_limit)
+                results.extend(products)
+                reports.append(report)
+                continue
+            if source not in HOSTS: continue
             report = {"source": source, "pages": 0, "items": 0, "errors": [], "failed_paths": []}
             try:
                 robots = await read_limited(client, f"https://{HOSTS[source]}/robots.txt")
