@@ -12,7 +12,7 @@ class TelegramMiniAppGateway:
         if not token:
             raise ValueError("Telegram Mini App uchun BOT_TOKEN kerak")
         self.core = core
-        self.static = StaticFiles(directory=str(directory), html=True)
+        self.static = StaticFiles(directory=str(directory), html=True, check_dir=False)
         self.token = token
         self.ttl = ttl
 
