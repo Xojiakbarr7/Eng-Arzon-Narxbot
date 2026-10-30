@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     bot_token: str = ""
     bot_internal_token: str = ""
     admin_token: str = ""
+    admin_telegram_ids: str = ""  # Comma-separated Telegram numeric user IDs
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173,http://localhost:8080"
     init_data_ttl_seconds: int = 3600
     offer_max_age_hours: int = 48
