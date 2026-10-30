@@ -100,4 +100,6 @@ def require_admin(
         require_internal(x_bot_token)
         if x_telegram_user_id.isascii() and x_telegram_user_id.isdecimal() and is_admin_user(int(x_telegram_user_id)):
             return True
+    if not any((authorization, x_telegram_init_data, x_bot_token, x_telegram_user_id)):
+        raise HTTPException(401, "Admin autentifikatsiyasi talab qilinadi")
     raise HTTPException(403, "Admin huquqi talab qilinadi")
