@@ -34,9 +34,9 @@ def sessions():
     engine.dispose()
 
 
-def add_offer(db, number, *, category=1, price=100, condition="new", demo=False, age=0, stock=True, url=None):
+def add_offer(db, number, *, category=1, price=100, condition="new", demo=False, age=0, stock=True, url=None, image=None):
     product = Product(name=f"Product {number}", slug=f"product-{number}", brand="T", model=str(number), category_id=category,
-                      attributes={"_condition": condition, "_source": "asaxiy"}, is_demo=demo)
+                      attributes={"_condition": condition, "_source": "asaxiy"}, image_url=image, is_demo=demo)
     db.add(product)
     db.flush()
     db.add(Offer(product_id=product.id, store_id=1, price=price, url=url or f"https://asaxiy.uz/product/item-{number}",
@@ -191,3 +191,55 @@ def test_slow_collection_uses_completion_clock_for_freshness(sessions):
     result = asyncio.run(run_cycle(settings, now=NOW, sessions=sessions, collector=collector,
                                    importer=importer, clock=lambda: completed))
     assert result["status"] == "ready" and result["selected"] == 1
+
+
+def test_photos_posted_individually_with_buy_link_and_no_duplicate(sessions, monkeypatch):
+    from app.channel_photos import photo_caption, safe_image_url
+    assert safe_image_url("https://cdn.asaxiy.uz/product/123.jpg")
+    assert not safe_image_url("https://127.0.0.1/private.jpg")
+    assert not safe_image_url("http://cdn.asaxiy.uz/p.jpg")
+
+    photos = []
+
+    async def collect(_):
+        return [object(), object()], [{"source": "asaxiy", "pages": 1}]
+
+    def importer(db, _):
+        p1 = add_offer(db, 23, image="https://cdn.asaxiy.uz/23.jpg")
+        p2 = add_offer(db, 24, image="https://cdn.asaxiy.uz/24.jpg")
+        return {"imported": 2, "product_ids": [p1, p2]}
+
+    async def fake_send(token, channel, deal):
+        assert token == "test-only" and channel == "@mychannel"
+        assert "Do‘kondan" not in photo_caption(deal) or "<a href=" in photo_caption(deal)
+        assert "https://asaxiy.uz/product/" in photo_caption(deal)
+        photos.append(deal)
+        return 600 + len(photos)
+
+    monkeypatch.setattr("app.daily_worker.send_product_photo", fake_send)
+    settings = DailySettings(enabled=True, post_enabled=True, channel="@mychannel", token="test-only")
+    first = asyncio.run(run_cycle(settings, now=NOW, sessions=sessions, collector=collect, importer=importer))
+    second = asyncio.run(run_cycle(settings, now=NOW, sessions=sessions, collector=collect, importer=importer))
+    assert first["status"] == "sent" and first["posted"] == 2
+    assert second == {"status": "skipped", "previous": "sent"}
+    assert len(photos) == 2
+    with sessions() as db:
+        row = db.scalar(select(DailyRun))
+        assert row.telegram_message_id == 602
+        assert len(row.source_report[-1]["posted"]) == 2
+
+
+def test_photo_posts_skip_items_without_real_source_image(sessions, monkeypatch):
+    async def collect(_):
+        return [object()], []
+
+    def importer(db, _):
+        return {"imported": 1, "product_ids": [add_offer(db, 50)]}
+
+    async def should_not_post(*args):
+        raise AssertionError("Never post an invented image")
+
+    monkeypatch.setattr("app.daily_worker.send_product_photo", should_not_post)
+    settings = DailySettings(enabled=True, post_enabled=True, channel="@mychannel", token="test-only")
+    result = asyncio.run(run_cycle(settings, now=NOW, sessions=sessions, collector=collect, importer=importer))
+    assert result["status"] == "empty"
