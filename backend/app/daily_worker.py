@@ -26,7 +26,8 @@ from sqlalchemy.exc import IntegrityError
 
 from .db import SessionLocal
 from .models import Category, DailyRun, Offer, Product, Store, utcnow
-from .services import aware
+from .services import aware, product_summary
+from .channel_photos import safe_image_url, send_product_photo, PhotoDeliveryError
 
 log = logging.getLogger("eng_arzon.daily")
 TASHKENT = ZoneInfo("Asia/Tashkent")
@@ -144,13 +145,16 @@ def select_deals(db, product_ids, now, limit=10):
             continue
         if not now - timedelta(hours=48) <= aware(offer.updated_at) <= now + timedelta(minutes=5) or offer.price <= 0:
             continue
+        price_data = product_summary(db, product)
         deal = {"product_id": product.id, "name": product.name, "price": offer.price,
                 "store": store.name, "url": offer.url, "category": category.name,
-                "category_id": category.id, "source": source}
+                "category_id": category.id, "source": source,
+                "image_url": product.image_url if safe_image_url(product.image_url) else None,
+                "discount_percent": price_data["discount_percent"], "old_price": price_data["old_price"]}
         if product.id not in by_product or offer.price < by_product[product.id]["price"]:
             by_product[product.id] = deal
     categories = defaultdict(list)
-    for deal in sorted(by_product.values(), key=lambda item: (item["price"], item["product_id"])):
+    for deal in sorted(by_product.values(), key=lambda item: (-item["discount_percent"], item["price"], item["product_id"])):
         categories[deal["category_id"]].append(deal)
     keys = sorted(categories)
     if keys:
@@ -251,19 +255,37 @@ async def run_cycle(settings, *, now=None, sessions=SessionLocal, collector=None
             db.commit()
             completed_at = aware((clock or utcnow)())
             deals = select_deals(db, stats.get("product_ids", []), completed_at, settings.max_items)
+        postable = [deal for deal in deals if safe_image_url(deal.get("image_url"))]
         message = render_digest(deals, completed_at)
-        state = "ready" if message else "empty"
-        set_state(sessions, run_id, state, completed_at, item_count=len(deals), message=message, source_report=reports)
+        state = "ready" if (message if publisher is not None or not settings.post_enabled else postable) else "empty"
+        set_state(sessions, run_id, state, completed_at, item_count=len(postable) if settings.post_enabled and publisher is None else len(deals), message=message, source_report=reports)
     except Exception as exc:
         set_state(sessions, run_id, "failed", now, error=type(exc).__name__[:80])
         log.error("Daily collection failed: %s", type(exc).__name__)
         return {"status": "failed", "error": type(exc).__name__}
     result = {"status": state, "collected": len(items), "imported": stats.get("imported", 0), "selected": len(deals), "sources": reports}
-    if not settings.post_enabled or not message:
+    if not settings.post_enabled or state == "empty":
         return result
+    if publisher is None:
+        posted = []
+        for deal in postable:
+            set_state(sessions, run_id, "sending", aware((clock or utcnow)()), source_report=reports + [{"posted": posted}])
+            try:
+                message_id = await send_product_photo(settings.token, settings.channel, deal)
+            except Exception as exc:
+                ambiguous = not isinstance(exc, PhotoDeliveryError) or exc.ambiguous
+                status = "uncertain" if ambiguous else "failed"
+                error = exc.kind if isinstance(exc, PhotoDeliveryError) else type(exc).__name__
+                set_state(sessions, run_id, status, utcnow(), error=error[:80], source_report=reports + [{"posted": posted}])
+                log.error("Daily photo posts stopped after %d: %s", len(posted), error[:80])
+                return {**result, "status": status, "posted": len(posted)}
+            posted.append({"product_id": deal["product_id"], "message_id": message_id})
+            set_state(sessions, run_id, "sending", utcnow(), telegram_message_id=message_id, source_report=reports + [{"posted": posted}])
+        set_state(sessions, run_id, "sent", utcnow(), item_count=len(posted))
+        return {**result, "status": "sent", "posted": len(posted)}
     set_state(sessions, run_id, "sending", aware((clock or utcnow)()))
     try:
-        message_id = await (publisher or send_digest)(settings.token, settings.channel, message)
+        message_id = await publisher(settings.token, settings.channel, message)
     except Exception as exc:
         ambiguous = not isinstance(exc, DeliveryError) or exc.ambiguous
         state = "uncertain" if ambiguous else "failed"
