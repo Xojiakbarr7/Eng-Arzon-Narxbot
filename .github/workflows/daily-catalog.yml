@@ -1,0 +1,30 @@
+"""Wake free Render web service for the daily 09:00 Asia/Tashkent collector.
+GitHub Actions schedules can be delayed. Actual collection is guarded by
+a persisted daily_runs claim to prevent a duplicate day's channel posts.
+"""
+name: Wake daily product collector
+on:
+  schedule:
+    - cron: '5 4 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  wake:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Wake backend so its scheduled collector can run
+        shell: bash
+        run: |
+          set -eu
+          for attempt in 1 2 3 4 5 6; do
+            if curl --fail --silent --show-error --max-time 60 \
+                "https://eng-arzon-narxbot-2.onrender.com/api/health"; then
+              exit 0
+            fi
+            sleep 20
+          done
+          exit 1
