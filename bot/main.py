@@ -128,6 +128,29 @@ async def show_products(message, products, title="Topilgan mahsulotlar"):
         )
 
 
+def is_admin(user_id: int) -> bool:
+    raw = os.getenv("ADMIN_TELEGRAM_IDS", "")
+    return str(user_id) in {part.strip() for part in raw.split(",") if part.strip().isascii() and part.strip().isdigit()}
+
+
+@router.message(Command("myid"))
+async def show_my_id(message: Message):
+    await message.answer(f"Sizning Telegram ID: <code>{message.from_user.id}</code>")
+
+
+@router.message(Command("admin"))
+async def admin_panel(message: Message, api: Api):
+    if not is_admin(message.from_user.id):
+        await message.answer("⛔ Sizga admin ruxsati berilmagan. ID: /myid")
+        return
+    data = await api.call("GET", "/api/admin/stats", message.from_user.id)
+    labels = {"products": "Mahsulotlar", "categories": "Kategoriyalar", "stores": "Do‘konlar", "offers": "Takliflar", "users": "Foydalanuvchilar", "alerts": "Kuzatuvlar", "imports": "Importlar"}
+    lines = ["🛡 <b>ADMIN PANEL</b>", ""]
+    lines.extend(f"• {labels.get(k,k)}: <b>{v}</b>" for k,v in data.items() if isinstance(v,int))
+    markup = miniapp("admin")
+    await message.answer("\\n".join(lines), reply_markup=markup)
+
+
 @router.message(CommandStart())
 async def start(message: Message, state: FSMContext):
     await state.clear()
@@ -506,6 +529,7 @@ async def main():
             BotCommand(command="alerts", description="Narx kuzatuvlari"),
             BotCommand(command="favorites", description="Sevimlilarim"),
             BotCommand(command="help", description="Yordam"),
+            BotCommand(command="myid", description="Telegram ID raqamim"),
         ])
         markup = miniapp()
         if markup:
