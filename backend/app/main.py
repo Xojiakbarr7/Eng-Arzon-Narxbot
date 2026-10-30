@@ -8,6 +8,7 @@ from datetime import timedelta
 import re
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -55,6 +56,17 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+
+# Only explicitly trusted Mini App origins may call the JSON API in browsers.
+# Telegram initData is still verified independently for each user request.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[origin.strip().rstrip("/") for origin in get_settings().cors_origins.split(",") if origin.strip()],
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-Telegram-Init-Data"],
+)
+
 
 
 def ensure_region(region: str) -> str:
