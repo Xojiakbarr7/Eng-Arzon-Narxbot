@@ -102,7 +102,7 @@ def test_collector_stops_source_on_throttle_without_bypassing(monkeypatch, tmp_p
     monkeypatch.setattr("app.collectors.asyncio.sleep", no_sleep)
     items, reports = asyncio.run(collect_sources(str(path)))
     assert items == [] and len(calls) == 2
-    assert reports[0]["errors"] == ["source_unavailable_or_invalid_config"]
+    assert reports[0]["errors"] == ["source_access_limited"]
 
 
 def test_more_specific_category_wins_for_same_listing(monkeypatch, tmp_path):
