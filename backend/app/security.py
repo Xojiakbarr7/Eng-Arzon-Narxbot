@@ -70,8 +70,34 @@ def current_user(
     return user
 
 
-def require_admin(authorization: str = Header(default="")):
+def admin_ids():
+    return {int(value.strip()) for value in get_settings().admin_telegram_ids.split(",")
+            if value.strip().isascii() and value.strip().isdigit() and int(value.strip()) > 0}
+
+
+def is_admin_user(user_id: int) -> bool:
+    return bool(admin_ids()) and user_id in admin_ids()
+
+
+def require_admin(
+    authorization: str = Header(default=""),
+    x_telegram_init_data: str = Header(default=""),
+    x_bot_token: str = Header(default=""),
+    x_telegram_user_id: str = Header(default=""),
+):
     configured = get_settings().admin_token
     supplied = authorization.removeprefix("Bearer ") if authorization.startswith("Bearer ") else ""
-    if not configured or not hmac.compare_digest(configured.encode(), supplied.encode()):
-        raise HTTPException(401, "Admin token talab qilinadi")
+    if configured and supplied and hmac.compare_digest(configured.encode(), supplied.encode()):
+        return True
+    if x_telegram_init_data:
+        try:
+            user = validate_init_data(x_telegram_init_data, get_settings().bot_token, get_settings().init_data_ttl_seconds)
+        except (ValueError, KeyError, TypeError, json.JSONDecodeError):
+            raise HTTPException(401, "Telegram sessiyasi yaroqsiz")
+        if is_admin_user(user["id"]):
+            return True
+    if x_bot_token or x_telegram_user_id:
+        require_internal(x_bot_token)
+        if x_telegram_user_id.isascii() and x_telegram_user_id.isdecimal() and is_admin_user(int(x_telegram_user_id)):
+            return True
+    raise HTTPException(403, "Admin huquqi talab qilinadi")
