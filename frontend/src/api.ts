@@ -3,7 +3,8 @@ export async function api<T>(path:string, options:RequestInit={}):Promise<T> {
   if(options.body && !(options.body instanceof FormData)) headers.set('Content-Type','application/json')
   const initData=window.Telegram?.WebApp.initData
   if(initData) headers.set('X-Telegram-Init-Data',initData)
-  const response=await fetch(`/api${path}`,{...options,headers})
+  const apiOrigin=(import.meta.env.VITE_API_BASE_URL||'').replace(/\/$/,'')
+  const response=await fetch(`${apiOrigin}/api${path}`,{...options,headers})
   if(!response.ok){ let message=`So‘rov bajarilmadi (${response.status})`; try {const data=await response.json(); message=typeof data.detail==='string'?data.detail:JSON.stringify(data.detail ?? data)}catch{/* use status */} throw new Error(message) }
   if(response.status===204) return undefined as T
   return response.json() as Promise<T>
