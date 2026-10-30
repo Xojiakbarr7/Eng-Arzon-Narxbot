@@ -17,6 +17,7 @@ SOURCES = {
     "asaxiy": ("Asaxiy", "asaxiy.uz"),
     "uzum": ("Uzum Market", "uzum.uz"),
     "olx": ("OLX", "www.olx.uz"),
+    "olcha": ("Olcha", "olcha.uz"),
 }
 
 
