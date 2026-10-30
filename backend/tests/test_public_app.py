@@ -25,7 +25,7 @@ def test_public_gateway_requires_signed_telegram_and_hides_admin(tmp_path, monke
         assert client.get("/api/health").status_code == 200
         assert client.get("/api/products").status_code == 401
         assert client.get("/api/products", headers={"X-Bot-Token": "anything", "X-Telegram-User-Id": "123"}).status_code == 401
-        assert client.get("/api/admin/stats").status_code == 404
+        assert client.get("/api/admin/stats").status_code == 401
         assert client.get("/api/internal/notifications/claim").status_code == 404
         assert client.get("/.env").status_code == 404
         fields = {"auth_date": str(int(time.time())), "user": json.dumps({"id": 123})}
