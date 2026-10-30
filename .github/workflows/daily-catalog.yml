@@ -1,9 +1,9 @@
-# Wake Render around 09:05 Asia/Tashkent daily.
+# Wake the free Render service every two hours around xx:05 Asia/Tashkent.
 # The DB's daily_runs unique claim guards against duplicate postings.
-name: Wake daily product collector
+name: Wake 2-hour product collector
 on:
   schedule:
-    - cron: '5 4 * * *'
+    - cron: '5 1-23/2 * * *'
   workflow_dispatch:
 
 permissions:
@@ -12,7 +12,7 @@ permissions:
 jobs:
   wake:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 10
     steps:
       - name: Wake backend so its scheduled collector can run
         shell: bash
