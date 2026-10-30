@@ -9,8 +9,6 @@ import hashlib
 import hmac
 import logging
 import os
-from pathlib import Path
-import sys
 from urllib.parse import urlparse
 
 import httpx
@@ -31,6 +29,9 @@ def webhook_secret(internal_token: str) -> str:
 
 
 async def enable_webhook(application: FastAPI) -> None:
+    if os.getenv("TELEGRAM_WEBHOOK_ENABLED", "false").strip().lower() != "true":
+        logger.info("Telegram webhook is disabled; set TELEGRAM_WEBHOOK_ENABLED=true to activate")
+        return
     settings = get_settings()
     token = settings.bot_token.strip()
     internal_token = settings.bot_internal_token.strip()
@@ -46,15 +47,8 @@ async def enable_webhook(application: FastAPI) -> None:
         logger.warning("Telegram webhook disabled: configure TELEGRAM_WEBHOOK_BASE_URL as the public HTTPS service origin")
         return
 
-    # rootDir=backend on Render, but bot/main.py remains a sibling at repo root.
-    project_root = Path(__file__).resolve().parents[2]
-    if str(project_root) not in sys.path:
-        sys.path.insert(0, str(project_root))
-    try:
-        from bot.main import Api, miniapp, notification_loop, router
-    except ImportError:
-        logger.exception("Telegram bot module could not be imported")
-        return
+    # Render rootDir=backend: embed the existing handlers in this package.
+    from .telegram_bot import Api, miniapp, notification_loop, router
 
     bot = Bot(token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     local_client = httpx.AsyncClient(
