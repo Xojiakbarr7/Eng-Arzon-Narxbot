@@ -8,3 +8,4 @@ python-dotenv==1.1.1
 httpx==0.28.1
 python-multipart==0.0.32
 pytest==8.4.2
+aiogram==3.31.0
