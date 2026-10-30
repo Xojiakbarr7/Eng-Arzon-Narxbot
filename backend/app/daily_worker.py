@@ -31,7 +31,7 @@ from .channel_photos import safe_image_url, send_product_photo, PhotoDeliveryErr
 
 log = logging.getLogger("eng_arzon.daily")
 TASHKENT = ZoneInfo("Asia/Tashkent")
-SOURCE_HOSTS = {"asaxiy": "asaxiy.uz", "uzum": "uzum.uz", "olx": "www.olx.uz"}
+SOURCE_HOSTS = {"asaxiy": "asaxiy.uz", "uzum": "uzum.uz", "olx": "www.olx.uz", "olcha": "olcha.uz"}
 
 
 def flag(value):
