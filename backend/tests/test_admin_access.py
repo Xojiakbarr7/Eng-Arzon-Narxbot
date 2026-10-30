@@ -38,4 +38,4 @@ def test_admin_authorization(monkeypatch):
         {"authorization": "Bearer wrong-token"},
     ):
         with pytest.raises(HTTPException):
-            require_admin(**headers)
+            require_admin(**{**blank, **headers})
