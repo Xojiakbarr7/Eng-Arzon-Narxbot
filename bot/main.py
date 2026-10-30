@@ -148,7 +148,7 @@ async def admin_panel(message: Message, api: Api):
     lines = ["🛡 <b>ADMIN PANEL</b>", ""]
     lines.extend(f"• {labels.get(k,k)}: <b>{v}</b>" for k,v in data.items() if isinstance(v,int))
     markup = miniapp("admin")
-    await message.answer("\\n".join(lines), reply_markup=markup)
+    await message.answer("\n".join(lines), reply_markup=markup)
 
 
 @router.message(CommandStart())
