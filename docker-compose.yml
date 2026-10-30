@@ -1,0 +1,71 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: eng_arzon
+      POSTGRES_USER: eng_arzon
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD .env faylida sozlanishi kerak}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U eng_arzon -d eng_arzon"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+  api:
+    build:
+      context: .
+      dockerfile: infra/backend.Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://eng_arzon:${POSTGRES_PASSWORD}@db:5432/eng_arzon
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+  web:
+    build:
+      context: .
+      dockerfile: infra/frontend.Dockerfile
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:80"
+    depends_on:
+      api:
+        condition: service_healthy
+  bot:
+    profiles: ["telegram"]
+    build:
+      context: .
+      dockerfile: infra/bot.Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      API_BASE_URL: http://api:8000
+    depends_on:
+      api:
+        condition: service_healthy
+  collector:
+    profiles: ["collection"]
+    build:
+      context: .
+      dockerfile: infra/backend.Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://eng_arzon:${POSTGRES_PASSWORD}@db:5432/eng_arzon
+      COLLECTION_CONFIG: /app/backend/collection-sources.json
+    command: ["python", "-m", "app.daily_worker"]
+    volumes:
+      - ./backend/collection-sources.json:/app/backend/collection-sources.json:ro
+    depends_on:
+      api:
+        condition: service_healthy
+volumes:
+  postgres_data:

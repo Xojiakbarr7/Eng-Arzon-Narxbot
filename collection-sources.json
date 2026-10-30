@@ -1,0 +1,52 @@
+{
+  "max_pages_per_source": 40,
+  "max_items_per_source": 200,
+  "request_delay_seconds": 2,
+  "sources": [
+    {
+      "source": "asaxiy",
+      "enabled": true,
+      "discover": true,
+      "seeds": [
+        {"url": "https://asaxiy.uz/product/telefony-i-gadzhety", "category": "elektronika"},
+        {"url": "https://asaxiy.uz/product/kompyutery-i-orgtehnika", "category": "elektronika"},
+        {"url": "https://asaxiy.uz/product/televizory-video-i-audio", "category": "elektronika"},
+        {"url": "https://asaxiy.uz/product/bytovaya-tehnika", "category": "maishiy-texnika"},
+        {"url": "https://asaxiy.uz/product/klimaticheskaya-tehnika", "category": "maishiy-texnika"},
+        {"url": "https://asaxiy.uz/product/mebel", "category": "uy-mebel"},
+        {"url": "https://asaxiy.uz/product/dlya-doma", "category": "uy-mebel"},
+        {"url": "https://asaxiy.uz/product/odejda-obuv-i-aksessuari", "category": "kiyim"},
+        {"url": "https://asaxiy.uz/product/krasota-i-zdorove", "category": "gozallik"},
+        {"url": "https://asaxiy.uz/product/detskiye-tovari", "category": "bolalar"},
+        {"url": "https://asaxiy.uz/product/instrumenty-i-avtotovary/aksessuary-dlya-avto", "category": "avto"},
+        {"url": "https://asaxiy.uz/product/sport-i-otdyh", "category": "sport"},
+        {"url": "https://asaxiy.uz/product/instrumenty-i-avtotovary", "category": "avto"},
+        {"url": "https://asaxiy.uz/product/knigi", "category": "kitob"},
+        {"url": "https://asaxiy.uz/product/kancelyarskie-tovary", "category": "kitob"},
+        {"url": "https://asaxiy.uz/product/kofe-i-chay", "category": "kundalik"},
+        {"url": "https://asaxiy.uz/product/suvi", "category": "kundalik"}
+      ]
+    },
+    {
+      "source": "olx",
+      "enabled": true,
+      "discover": false,
+      "seeds": [
+        {"url": "https://www.olx.uz/elektronika/", "category": "elektronika"},
+        {"url": "https://www.olx.uz/detskiy-mir/", "category": "bolalar"},
+        {"url": "https://www.olx.uz/dom-i-sad/", "category": "uy-mebel"},
+        {"url": "https://www.olx.uz/dom-i-sad/tovari-dlya-stroitelstva-remonta/", "category": "qurilish"},
+        {"url": "https://www.olx.uz/moda-i-stil/", "category": "kiyim"},
+        {"url": "https://www.olx.uz/hobbi-otdyh-i-sport/", "category": "sport"}
+      ]
+    },
+    {
+      "source": "uzum",
+      "enabled": true,
+      "discover": true,
+      "seeds": [
+        {"url": "https://uzum.uz/uz/category/elektronika-10020", "category": "elektronika"}
+      ]
+    }
+  ]
+}

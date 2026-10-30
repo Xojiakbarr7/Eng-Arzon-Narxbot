@@ -1,0 +1,10 @@
+export type Product = { id:number; name:string; slug:string; brand:string; model:string; category_id:number; category_name:string; description:string; image_url:string|null; emoji:string; attributes:Record<string,string|number>; barcode:string|null; min_price:number|null; store_count:number; is_demo:boolean; discount_percent:number; favorite:boolean }
+export type Category = {id:number;name:string;slug:string;emoji:string;parent_id:number|null}
+export type Store = {id:number;name:string;slug:string;adapter_status:string;delivery_fee:number;free_delivery_threshold:number;is_demo:boolean}
+export type Offer = {id:number;store_id:number;store_name:string;price:number;delivery_fee:number|null;total_price:number|null;currency:string;in_stock:boolean;url:string|null;updated_at:string;is_demo:boolean;stale:boolean}
+export type Insight = {verdict:'buy'|'wait'|'neutral'|'insufficient';title:string;explanation:string;current_price:number|null;average_price:number|null;lowest_price:number|null;percent_vs_average:number|null;sample_count:number;span_days:number;is_demo:boolean}
+export type Detail = Product & {offers:Offer[];history:{date:string;price:number;is_demo:boolean}[];insight:Insight;shipping_notice?:string}
+export type Alert = {id:number;product_id:number;product_name:string;target_price:number;enabled:boolean;created_at:string}
+export type CartEntry = {product:Product;quantity:number}
+export type BasketResult = {items:{product_id:number;name:string;quantity:number;store_id:number;store_name:string;unit_price:number;subtotal:number}[];stores:{store_id:number;store_name:string;subtotal:number;delivery_fee:number;total:number}[];subtotal:number;delivery_total:number;total:number;savings:number;single_store_total:number|null;is_demo:boolean;warnings:string[]}
+declare global { interface Window { Telegram?: {WebApp:{initData:string;ready:()=>void;expand:()=>void;colorScheme?:string;openLink?:(url:string)=>void;HapticFeedback?:{impactOccurred:(style:string)=>void}}}; BarcodeDetector?: {new(options:{formats:string[]}):{detect:(source:HTMLVideoElement)=>Promise<{rawValue:string}[]>};getSupportedFormats?:()=>Promise<string[]>} } }
