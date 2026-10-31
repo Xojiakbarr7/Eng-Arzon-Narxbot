@@ -1,4 +1,4 @@
-"""Daily catalog refresh and one durable Telegram channel digest.
+"""Two-hour live catalog refresh and opt-in individual channel photo posts.
 
 Enable explicitly through COLLECTION_ENABLED and DAILY_POST_ENABLED. Delivery
 with an unknown outcome is never retried automatically: inspect the channel
@@ -48,6 +48,8 @@ class DailySettings:
     max_items: int = 10
     interval_seconds: int = 60
     collection_interval_hours: int = 2
+    channel_post_interval_hours: int = 24
+    repost_after_days: int = 7
     config_path: str = str(Path(__file__).resolve().parents[1] / "collection-sources.json")
     token: str = ""
 
@@ -64,11 +66,16 @@ class DailySettings:
         if posts and (not re.fullmatch(r"(?:@[A-Za-z][A-Za-z0-9_]{4,31}|-100\d{5,})", channel) or not token):
             raise ValueError("Kanalga yuborish uchun DAILY_CHANNEL_ID va BOT_TOKEN kerak")
         collection_interval = int(os.getenv("COLLECTION_INTERVAL_HOURS", "2"))
+        post_interval = int(os.getenv("CHANNEL_POST_INTERVAL_HOURS", "2"))
+        if post_interval not in (1, 2, 3, 4, 6, 8, 12, 24):
+            raise ValueError("CHANNEL_POST_INTERVAL_HOURS 1,2,3,4,6,8,12 yoki 24 bo‘lsin")
         if collection_interval not in (1, 2, 3, 4, 6, 8, 12, 24):
             raise ValueError("COLLECTION_INTERVAL_HOURS 1,2,3,4,6,8,12 yoki 24 bo‘lsin")
         return cls(
             enabled=enabled, post_enabled=posts, channel=channel,
             collection_interval_hours=collection_interval,
+            channel_post_interval_hours=post_interval,
+            repost_after_days=max(1, min(30, int(os.getenv("CHANNEL_REPOST_AFTER_DAYS", "7")))),
             hour=hour, minute=minute,
             max_items=max(1, min(10, int(os.getenv("DAILY_MAX_ITEMS", "10")))),
             interval_seconds=max(30, int(os.getenv("COLLECTION_POLL_SECONDS", "60"))),
@@ -85,11 +92,11 @@ def day_key(now, settings):
     local = aware(now).astimezone(TASHKENT)
     day = local.date().isoformat()
     destination = settings.channel if settings.post_enabled else "catalog"
-    if settings.post_enabled:
-        # Channel posts stay once a day, not 12 times daily.
+    hours = settings.channel_post_interval_hours if settings.post_enabled else settings.collection_interval_hours
+    if hours == 24:
         return f"{day}:{destination}", day, destination
-    # A unique DB claim per two-hour wall-clock slot, in Tashkent time.
-    slot = local.hour // settings.collection_interval_hours
+    # One durable claim per local time slot; the channel has its own claim.
+    slot = local.hour // hours
     return f"{day}:slot-{slot:02d}:{destination}", day, destination
 
 
@@ -185,6 +192,27 @@ def select_deals(db, product_ids, now, limit=10):
     return result
 
 
+def recently_posted_ids(db, channel, now, days=7):
+    """Exclude products already posted within the recent window.
+
+    Include partial/uncertain runs so a timeout cannot repost products whose
+    Telegram message was already confirmed.
+    """
+    since = now - timedelta(days=days)
+    reports = db.scalars(select(DailyRun).where(
+        DailyRun.destination == channel, DailyRun.created_at >= since,
+    )).all()
+    ids = set()
+    for run in reports:
+        for entry in run.source_report or []:
+            if not isinstance(entry, dict):
+                continue
+            for post in entry.get("posted", []):
+                if isinstance(post, dict) and type(post.get("product_id")) is int and type(post.get("message_id")) is int:
+                    ids.add(post["product_id"])
+    return ids
+
+
 def telegram_units(value):
     return len(value.encode("utf-16-le")) // 2
 
@@ -267,7 +295,12 @@ async def run_cycle(settings, *, now=None, sessions=SessionLocal, collector=None
             stats = importer(db, items)
             db.commit()
             completed_at = aware((clock or utcnow)())
-            deals = select_deals(db, stats.get("product_ids", []), completed_at, settings.max_items)
+            eligible_ids = stats.get("product_ids", [])
+            if settings.post_enabled and publisher is None:
+                prior_ids = recently_posted_ids(db, settings.channel, completed_at, settings.repost_after_days)
+                eligible_ids = [product_id for product_id in eligible_ids if product_id not in prior_ids]
+                log.warning("Channel post candidates after dedupe: %d", len(eligible_ids))
+            deals = select_deals(db, eligible_ids, completed_at, settings.max_items)
         postable = [deal for deal in deals if safe_image_url(deal.get("image_url"))]
         message = render_digest(deals, completed_at)
         log.warning("Catalog import: imported=%d, selected=%d", stats.get("imported", 0), len(deals))
@@ -313,12 +346,12 @@ async def run_cycle(settings, *, now=None, sessions=SessionLocal, collector=None
 
 async def serve(settings):
     previous = {}
-    # The Mini App collector always runs in 2-hour slots. Channel posting,
-    # when enabled separately, remains a once-daily job.
+    # The Mini App collects every two hours; channel delivery is controlled
+    # independently and uses a separate time-slot claim and dedupe history.
     catalog_settings = replace(settings, post_enabled=False)
     while True:
         for task, active_settings in (("catalog", catalog_settings), ("channel", settings)):
-            if task == "channel" and (not settings.post_enabled or not is_due(utcnow(), settings)):
+            if task == "channel" and (not settings.post_enabled or (settings.channel_post_interval_hours == 24 and not is_due(utcnow(), settings))):
                 continue
             slot_key = day_key(utcnow(), active_settings)[0]
             if previous.get(task, (None, None))[0] == slot_key:
@@ -338,7 +371,7 @@ async def serve(settings):
 def main():
     from dotenv import load_dotenv
     load_dotenv(Path(__file__).resolve().parents[2] / ".env")
-    parser = argparse.ArgumentParser(description="Kunlik katalog yig‘ish va kanalga bitta xulosa")
+    parser = argparse.ArgumentParser(description="Har ikki soatda katalog yig‘ish va rasmli kanal postlari")
     parser.add_argument("--once", action="store_true", help="Jadval vaqtini kutmay, bir kunlik ishni bajaring")
     parser.add_argument("--dry-run", action="store_true", help="Manbalarni tekshirish: baza va Telegramga yozilmaydi")
     args = parser.parse_args()
