@@ -58,6 +58,7 @@ def test_api_is_opt_in_and_no_ai_call_without_key(monkeypatch):
 def test_optional_openai_uses_catalogue_context_but_never_returns_generated_prices(monkeypatch):
     settings = get_settings()
     monkeypatch.setattr(settings, "ai_enabled", True)
+    monkeypatch.setattr(settings, "ai_provider", "openai")
     monkeypatch.setattr(settings, "openai_api_key", "fake-provider-key")
     monkeypatch.setattr(settings, "ai_model", "gpt-6-luna")
     captured = []
@@ -84,3 +85,104 @@ def test_optional_openai_uses_catalogue_context_but_never_returns_generated_pric
     response_text[0] = "Narxi 999 so‘m"  # model-invented values are rejected
     assert asyncio.run(ai_explanation("eng arzon telefon qaysi", rows)) is None
     assert len(captured) == 2
+
+
+
+def test_gemini_parser_extracts_only_candidate_text():
+    from app.ai_shopping import parse_gemini_text
+    assert parse_gemini_text({"candidates":[{"content":{"role":"model","parts":[
+        {"text":"Bularning narxlari katalogda ko‘rsatilgan."},
+        {"inlineData":{"mimeType":"text/plain","data":"ignored"}}
+    ]}}]}) == "Bularning narxlari katalogda ko‘rsatilgan."
+    assert parse_gemini_text({"candidates":[]}) == ""
+    assert parse_gemini_text({"error":{"message":"quota exhausted"}}) == ""
+
+
+def test_gemini_requires_explicit_key_and_opt_in(monkeypatch):
+    from app.ai_shopping import configured_ai_provider
+    cfg = get_settings()
+    monkeypatch.setattr(cfg, "ai_provider", "gemini")
+    monkeypatch.setattr(cfg, "gemini_api_key", "")
+    monkeypatch.setattr(cfg, "ai_enabled", True)
+    assert configured_ai_provider() is None
+    assert asyncio.run(ai_explanation("telefon", [{
+        "name": "Telefon A", "price": 100000, "store": "Olcha"
+    }])) is None
+    monkeypatch.setattr(cfg, "gemini_api_key", "fake-key")
+    assert configured_ai_provider() == "gemini"
+    monkeypatch.setattr(cfg, "ai_enabled", False)
+    assert configured_ai_provider() is None
+
+
+def test_gemini_rest_sends_only_catalog_data_and_never_generates_prices(monkeypatch):
+    from app.ai_shopping import configured_ai_provider
+    cfg = get_settings()
+    monkeypatch.setattr(cfg, "ai_enabled", True)
+    monkeypatch.setattr(cfg, "ai_provider", "gemini")
+    monkeypatch.setattr(cfg, "gemini_api_key", "test-gemini-auth-key")
+    monkeypatch.setattr(cfg, "gemini_model", "gemini-2.5-flash-lite")
+    assert configured_ai_provider() == "gemini"
+    calls = []
+    returned = ["Variantlarni katalogdagi narxlari bo‘yicha solishtiring. Xarid oldidan do‘konda tekshiring."]
+
+    def reply(request):
+        calls.append(request)
+        assert request.method == "POST"
+        assert str(request.url) == (
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent"
+        )
+        assert request.headers.get("x-goog-api-key") == "test-gemini-auth-key"
+        assert "test-gemini-auth-key" not in str(request.url)
+        data = __import__("json").loads(request.content)
+        assert "catalogue_candidates" in data["contents"][0]["parts"][0]["text"]
+        assert "150000" in data["contents"][0]["parts"][0]["text"]
+        assert "faqat" in data["systemInstruction"]["parts"][0]["text"].lower()
+        assert not data.get("tools")
+        return httpx.Response(200, json={"candidates":[{"content":{"role":"model","parts":[{"text":returned[0]}]}}]})
+
+    original = httpx.AsyncClient
+    monkeypatch.setattr("app.ai_shopping.httpx.AsyncClient",
+        lambda **kwargs: original(transport=httpx.MockTransport(reply), **kwargs))
+    rows = [{"name": "Smartfon A", "price": 150000, "store": "Olcha"}]
+    answer = asyncio.run(ai_explanation("eng arzon telefon", rows))
+    assert "Variantlarni katalogdagi" in answer
+    returned[0] = "Narxi 987 000 so‘m"  # Invented Gemini price cannot escape SQL.
+    assert asyncio.run(ai_explanation("eng arzon telefon", rows)) is None
+    assert len(calls) == 2
+
+
+def test_gemini_quota_or_denial_falls_back_to_catalogue(monkeypatch):
+    cfg = get_settings()
+    monkeypatch.setattr(cfg, "ai_enabled", True)
+    monkeypatch.setattr(cfg, "ai_provider", "gemini")
+    monkeypatch.setattr(cfg, "gemini_api_key", "test-gemini-auth-key")
+    calls = []
+    def reply(request):
+        calls.append(1)
+        return httpx.Response(429, json={"error":{"message":"rate limit"}})
+    original = httpx.AsyncClient
+    monkeypatch.setattr("app.ai_shopping.httpx.AsyncClient",
+        lambda **kwargs: original(transport=httpx.MockTransport(reply), **kwargs))
+    assert asyncio.run(ai_explanation("telefon", [{
+        "name":"Real smartfon", "price":150000, "store":"Olcha"
+    }])) is None
+    assert calls == [1]
+
+
+def test_gemini_rejects_unknown_models_without_dialing_custom_hosts(monkeypatch):
+    cfg = get_settings()
+    monkeypatch.setattr(cfg, "ai_enabled", True)
+    monkeypatch.setattr(cfg, "ai_provider", "gemini")
+    monkeypatch.setattr(cfg, "gemini_api_key", "test-gemini-auth-key")
+    monkeypatch.setattr(cfg, "gemini_model", "https://evil.example/steal")
+    called = []
+    def reply(request):
+        called.append(str(request.url))
+        return httpx.Response(200, json={"candidates":[]})
+    original = httpx.AsyncClient
+    monkeypatch.setattr("app.ai_shopping.httpx.AsyncClient",
+        lambda **kwargs: original(transport=httpx.MockTransport(reply), **kwargs))
+    assert asyncio.run(ai_explanation("telefon", [{
+        "name":"Real smartfon", "price":150000, "store":"Olcha"
+    }])) is None
+    assert called == ["https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent"]
