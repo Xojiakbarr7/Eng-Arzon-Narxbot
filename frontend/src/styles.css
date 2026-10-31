@@ -57,3 +57,9 @@
 .ai-price-row b{font-size:14px;white-space:nowrap}
 .ai-price-row .offer-external{display:inline-flex;align-items:center;gap:5px;white-space:nowrap;font-size:13px}
 @media(max-width:850px){.ai-price-row{grid-template-columns:minmax(0,1fr) auto;row-gap:6px}.ai-price-row>.muted{grid-column:1}.ai-price-row .offer-external{grid-column:1/-1;justify-self:start}}
+
+
+/* Non-secret readiness diagnostics for the logged-in shopping assistant. */
+.ai-status-panel{width:100%;border:1px solid var(--line);border-radius:11px;padding:12px 14px;display:grid;gap:5px}
+.ai-status-panel b{font-size:14px}
+.ai-status-panel p{margin:0;font-size:13px;line-height:1.5;overflow-wrap:anywhere}
