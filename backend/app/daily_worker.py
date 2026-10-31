@@ -119,7 +119,7 @@ def channel_rotation_offset(now, settings):
     local = aware(now).astimezone(TASHKENT)
     hours = settings.channel_post_interval_hours
     slot = (local.date().toordinal() * (24 // hours)
-            + ((local.hour - settings.hour) % 24) // hours)
+            + (local.hour - settings.hour) // hours)
     return slot * settings.max_items
 
 
