@@ -35,7 +35,7 @@ MENU = [
     ["🧺 Eng arzon savatcha", "📷 Shtrix-kod"],
     ["🤖 AI xarid yordamchisi", "📸 Rasm bilan qidirish"],
     ["🔔 Narx kuzatuvlari", "❤️ Sevimlilarim"],
-    ["⚖️ Mahsulot solishtirish", "📊 Narxlar tarixi"],
+    ["⚖️ AI bilan solishtirish", "📊 Narxlar tarixi"],
     ["🎁 Bonuslar", "👤 Profilim"],
     ["⚙️ Sozlamalar", "☎️ Yordam"],
 ]
@@ -122,9 +122,11 @@ async def show_products(message, products, title="Topilgan mahsulotlar"):
             f"Mahsulot ID: <code>{pid}</code>{badge}\n"
             f"Kuzatish: <code>/watch {pid} NARX</code>\n"
             f"Tarix: <code>/history {pid}</code>",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
-                InlineKeyboardButton(text="❤️ Saqlash", callback_data=f"fav:{pid}")
-            ]]),
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="❤️ Saqlash", callback_data=f"fav:{pid}")],
+                *([[InlineKeyboardButton(text="🛍 Do‘konda ko‘rish", url=product["buy_url"])]]
+                  if isinstance(product.get("buy_url"), str) and product["buy_url"].startswith("https://") else []),
+            ]),
         )
 
 
@@ -172,6 +174,7 @@ async def help_command(message: Message, state: FSMContext):
     await message.answer(
         "<b>Buyruqlar</b>\n"
         "/search iphone — qidirish\n"
+        "/ai 3 mln so‘mgacha telefon — AI xarid yordamchisi\n"
         "/best — arzon mahsulotlar\n"
         "/deals — narx tarixidan chegirmalar\n"
         "/favorites — sevimlilar\n"
@@ -313,11 +316,14 @@ async def assistant_command(message: Message, state: FSMContext, api: Api):
     text = (message.text or "").partition(" ")[2].strip() if message.text.startswith("/") else ""
     if not text:
         await state.set_state(Flow.assistant)
-        await message.answer("Savolingizni yozing. Masalan: 3 million so‘mgacha telefon.\n\nHozir katalogga asoslangan qoidaviy yordamchi ishlaydi. Generativ AI ulanmagan.")
+        await message.answer("🤖 Xarid yordamchisiga savolingizni yozing.\nMasalan: 3 million so‘mgacha telefon topib ber.\nYoki: Samsung va Redmi telefonlarini solishtir.\n\nSuhbatni davom ettirishingiz mumkin. Tugatish: /cancel")
         return
+    await state.set_state(Flow.assistant)
+    await state.update_data(history=[text])
     data = await api.call("POST", "/api/assistant", message.from_user.id, json={"message": text})
     await message.answer(escape(data.get("answer", data.get("message", "Katalogdan mos mahsulotlar tekshirildi."))))
-    await show_products(message, data.get("products", []), "Mos mahsulotlar")
+    if data.get("products"):
+        await show_products(message, data["products"], "Katalogdagi mos mahsulotlar")
 
 
 @router.message(Command("basket"))
@@ -407,10 +413,11 @@ async def catalog(message: Message, state: FSMContext, api: Api):
         await message.answer(f"Keyingi sahifa: <code>/catalog {page + 1}</code>\nSavatcha: <code>/basket 1,2,3,4,5</code> — o‘zingiz tanlagan ID’larni yozing.")
 
 
-@router.message(F.text == "⚖️ Mahsulot solishtirish")
+@router.message(F.text == "⚖️ AI bilan solishtirish")
 async def compare(message: Message, state: FSMContext):
     await state.clear()
-    await open_app(message, "compare", "Mahsulot sahifasida bir xil model va variantning do‘konlardagi narxlarini yetkazish bilan solishtiring.")
+    await state.set_state(Flow.assistant)
+    await message.answer("🤖 Qaysi mahsulotlarni solishtiray? Masalan: Samsung va Redmi telefonlarini solishtir.\nSavolni yuboring; keyin davom ettirishingiz mumkin. /cancel — chiqish.")
 
 
 @router.message(F.text.in_({"👤 Profilim", "⚙️ Sozlamalar"}))
@@ -445,11 +452,14 @@ async def barcode_input(message: Message, state: FSMContext, api: Api):
 
 @router.message(Flow.assistant, F.text)
 async def assistant_input(message: Message, state: FSMContext, api: Api):
-    await state.clear()
-    data = await api.call("POST", "/api/assistant", message.from_user.id, json={"message": message.text[:1000]})
+    text = (message.text or "")[:1000]
+    session = await state.get_data()
+    history = [h for h in session.get("history", []) if isinstance(h, str)][-4:]
+    data = await api.call("POST", "/api/assistant", message.from_user.id, json={"message": text, "history": history})
+    await state.update_data(history=(history + [text])[-4:])
     await message.answer(escape(data.get("answer", data.get("message", "Qidiruv yakunlandi."))))
     if data.get("products"):
-        await show_products(message, data["products"])
+        await show_products(message, data["products"], "AI tanlagan katalog takliflari")
 
 
 @router.message(Flow.basket, F.text)
@@ -467,6 +477,15 @@ async def search_input(message: Message, state: FSMContext, api: Api):
     if query.isdigit() and len(query) in (8, 12, 13, 14):
         data = await api.call("GET", f"/api/barcode/{query}", message.from_user.id)
         await show_products(message, [data.get("product", data)])
+        return
+    intent = re.search(r"arzon|narx|topib ber|solishtir|taqqosla|qaysi yaxsh|\bmln\b|million|\bbyudjet\b", query.casefold())
+    if intent and len(query) >= 5:
+        data = await api.call("POST", "/api/assistant", message.from_user.id, json={"message": query[:1000]})
+        await message.answer(escape(data.get("answer", "Katalog tekshirildi.")))
+        if data.get("products"):
+            await show_products(message, data["products"], "Tanlangan takliflar")
+        await state.set_state(Flow.assistant)
+        await state.update_data(history=[query[:1000]])
         return
     data = await api.call("GET", "/api/products", message.from_user.id, params={"q": query[:200], "page_size": 6})
     await show_products(message, data["items"])
