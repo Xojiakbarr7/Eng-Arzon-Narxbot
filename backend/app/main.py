@@ -4,6 +4,8 @@ Restored after a GitHub web upload flattened the original directory structure.
 Business logic lives in services.py, seed.py, imports.py and security.py.
 """
 from contextlib import asynccontextmanager
+from collections import deque
+from time import monotonic
 import asyncio
 import logging
 from datetime import timedelta
@@ -39,6 +41,8 @@ from .services import (
 )
 
 rate_windows = {}
+ai_user_windows = {}
+ai_global_window = deque()
 
 
 @asynccontextmanager
@@ -370,6 +374,20 @@ def basket(data: BasketRequest, db: Session = Depends(get_db), user: User = Depe
 @app.post("/api/assistant")
 async def assistant(data: AssistantRequest, db: Session = Depends(get_db), user: User = Depends(current_user)):
     """Catalog-grounded shopping comparison; generative AI needs explicit key + opt-in."""
+    cfg = get_settings()
+    if cfg.ai_enabled and cfg.openai_api_key:
+        # A paid model must not be callable at unlimited speed. Render currently
+        # runs one worker; per-user and process-wide quotas cover that deployment.
+        now = monotonic()
+        window = ai_user_windows.setdefault(user.id, deque())
+        while window and now - window[0] > 60:
+            window.popleft()
+        while ai_global_window and now - ai_global_window[0] > 60:
+            ai_global_window.popleft()
+        if len(window) >= 8 or len(ai_global_window) >= 40:
+            raise HTTPException(429, "AI so‘rovlar chegarasiga yetdingiz. Bir ozdan keyin qayta urinib ko‘ring.")
+        window.append(now)
+        ai_global_window.append(now)
     return await shopping_reply(db, user, data.message, data.history)
 
 
