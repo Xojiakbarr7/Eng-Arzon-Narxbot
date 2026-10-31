@@ -265,3 +265,60 @@ def test_catalog_refresh_interval_env_validation(monkeypatch):
     monkeypatch.setenv("COLLECTION_INTERVAL_HOURS", "5")
     with pytest.raises(ValueError, match="COLLECTION_INTERVAL_HOURS"):
         DailySettings.from_env()
+
+
+def test_channel_slots_are_every_two_hours_when_configured():
+    settings = DailySettings(
+        enabled=True, post_enabled=True, channel="@mychannel", channel_post_interval_hours=2
+    )
+    one = datetime(2026, 10, 30, 5, 0, tzinfo=timezone.utc)  # 10:00 Tashkent
+    within_slot = one + timedelta(minutes=95)
+    next_slot = one + timedelta(hours=2)
+    assert day_key(one, settings)[0] == day_key(within_slot, settings)[0]
+    assert day_key(one, settings)[0] != day_key(next_slot, settings)[0]
+
+
+def test_two_hour_channel_photo_posts_dedupe_recent_product_ids(sessions, monkeypatch):
+    with sessions() as db:
+        ids = [add_offer(db, n, image=f"https://cdn.asaxiy.uz/{n}.jpg", price=100+n) for n in range(70, 73)]
+        db.commit()
+    photos = []
+
+    async def collect(_):
+        return [object()], [{"source": "asaxiy", "pages": 1}]
+
+    def importer(_db, _):
+        return {"imported": 3, "product_ids": ids}
+
+    async def post_photo(token, channel, deal):
+        assert token == "test-only" and channel == "@mychannel"
+        photos.append(deal["product_id"])
+        return 700 + len(photos)
+
+    monkeypatch.setattr("app.daily_worker.send_product_photo", post_photo)
+    settings = DailySettings(
+        enabled=True, post_enabled=True, channel="@mychannel", token="test-only",
+        channel_post_interval_hours=2, max_items=2
+    )
+    one = asyncio.run(run_cycle(settings, now=NOW, sessions=sessions, collector=collect, importer=importer))
+    two = asyncio.run(run_cycle(settings, now=NOW + timedelta(hours=2), sessions=sessions, collector=collect, importer=importer))
+    three = asyncio.run(run_cycle(settings, now=NOW + timedelta(hours=4), sessions=sessions, collector=collect, importer=importer))
+    assert one["status"] == "sent" and one["posted"] == 2
+    assert two["status"] == "sent" and two["posted"] == 1
+    assert three["status"] == "empty"
+    assert set(photos) == set(ids) and len(photos) == 3
+    with sessions() as db:
+        runs = db.scalars(select(DailyRun).where(DailyRun.destination == "@mychannel")).all()
+        assert len(runs) == 3
+
+
+def test_channel_two_hour_setting_from_environment(monkeypatch):
+    monkeypatch.setenv("CHANNEL_POST_INTERVAL_HOURS", "2")
+    monkeypatch.setenv("DAILY_POST_ENABLED", "true")
+    monkeypatch.setenv("DAILY_CHANNEL_ID", "@mychannel")
+    monkeypatch.setenv("BOT_TOKEN", "test-only")
+    settings = DailySettings.from_env()
+    assert settings.channel_post_interval_hours == 2
+    monkeypatch.setenv("CHANNEL_POST_INTERVAL_HOURS", "5")
+    with pytest.raises(ValueError, match="CHANNEL_POST_INTERVAL_HOURS"):
+        DailySettings.from_env()
