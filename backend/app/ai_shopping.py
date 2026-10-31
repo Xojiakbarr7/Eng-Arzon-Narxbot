@@ -230,8 +230,8 @@ async def ai_explanation(message, comparison, history=()):
     }, ensure_ascii=False)
     if provider == "gemini":
         # A hard-coded HTTPS origin ensures user input cannot redirect the key.
-        allowed_models = {"gemini-2.5-flash-lite", "gemini-2.5-flash"}
-        model = settings.gemini_model if settings.gemini_model in allowed_models else "gemini-2.5-flash-lite"
+        allowed_models = {"gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-2.5-flash-lite"}
+        model = settings.gemini_model if settings.gemini_model in allowed_models else "gemini-3.5-flash-lite"
         endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
         headers = {"x-goog-api-key": settings.gemini_api_key, "Content-Type": "application/json"}
         payload = {
