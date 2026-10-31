@@ -371,6 +371,35 @@ def basket(data: BasketRequest, db: Session = Depends(get_db), user: User = Depe
     return optimize_basket(db, data.items, ensure_region(data.region))
 
 
+@app.get("/api/assistant/status")
+def assistant_status(user: User = Depends(current_user)):
+    """Report readiness to the signed-in user without revealing API credentials."""
+    cfg = get_settings()
+    provider = cfg.ai_provider if cfg.ai_provider in ("gemini", "openai") else "unknown"
+    key_configured = bool(cfg.gemini_api_key.strip()) if provider == "gemini" else (
+        bool(cfg.openai_api_key.strip()) if provider == "openai" else False
+    )
+    ready = bool(cfg.ai_enabled and key_configured)
+    if not cfg.ai_enabled:
+        explanation = "AI xizmati hozir o‘chirilgan. Katalog qidiruvi ishlaydi."
+    elif not key_configured:
+        explanation = ("Gemini API kaliti ulanmagan. Admin Render backend'ning "
+                       "Environment bo‘limiga GEMINI_API_KEY kiritishi kerak."
+                       if provider == "gemini" else
+                       "AI xizmati uchun server kaliti ulanmagan.")
+    else:
+        explanation = ("AI kaliti sozlangan, ammo Google API'ga kirish va bepul limit "
+                       "faqat haqiqiy savol yuborilganda tekshiriladi.")
+    return {
+        "provider": provider,
+        "model": cfg.gemini_model if provider == "gemini" else cfg.ai_model,
+        "enabled": cfg.ai_enabled,
+        "key_configured": key_configured,
+        "ready": ready,
+        "message": explanation,
+    }
+
+
 @app.post("/api/assistant")
 async def assistant(data: AssistantRequest, db: Session = Depends(get_db), user: User = Depends(current_user)):
     """Catalog-grounded shopping comparison; generative AI needs explicit key + opt-in."""
