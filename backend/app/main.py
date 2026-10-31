@@ -368,32 +368,9 @@ def basket(data: BasketRequest, db: Session = Depends(get_db), user: User = Depe
 
 
 @app.post("/api/assistant")
-def assistant(data: AssistantRequest, db: Session = Depends(get_db), user: User = Depends(current_user)):
-    message = data.message.casefold()
-    # This is a rule-based catalog assistant, not a generative AI service.
-    budget = None
-    match = re.search(r"(\d+(?:[.,]\d+)?)\s*(million|mln|milliongacha|mlngacha|млн)", message)
-    if match:
-        budget = int(float(match.group(1).replace(",", ".")) * 1_000_000)
-    else:
-        match = re.search(r"(\d[\d\s]{4,})\s*(so['‘’]?m|sum|сум)", message)
-        if match:
-            budget = int(match.group(1).replace(" ", ""))
-    terms = {
-        "telefon": "telefon", "smartfon": "telefon", "iphone": "iphone",
-        "samsung": "samsung", "noutbuk": "noutbuk", "kitob": "kitob",
-        "simsiz": "quloqchin", "quloqchin": "quloqchin",
-    }
-    q = next((value for key, value in terms.items() if key in message), "")
-    if q == "telefon":
-        q = ""
-    items, _ = search_catalog(db, user, q, "", "", None, budget, "price_asc", 1, 8)
-    answer = (
-        ("Byudjetingizga mos kuzatilgan katalog takliflari." if budget else "Katalogdagi eng arzon mavjud variantlar.")
-        if items else "Hozircha mos mahsulot topilmadi."
-    )
-    return {"mode": "statistical", "answer": answer, "products": items,
-            "notice": "Bu katalogga asoslangan qoidaviy yordamchi, generativ AI ulanmagan."}
+async def assistant(data: AssistantRequest, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    """Catalog-grounded shopping comparison; generative AI needs explicit key + opt-in."""
+    return await shopping_reply(db, user, data.message, data.history)
 
 
 @app.get("/api/admin/stats", dependencies=[Depends(require_admin)])
