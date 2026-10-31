@@ -73,7 +73,7 @@ def search_terms(message: str):
     if aliases:
         # Model hints (e.g. A55, 256) still narrow phone/category results.
         qualifiers = [w for w in words if w not in BRANDS and w not in ALIASES
-                      and w not in {"telefon", "smartfon", "noutbuk", "televizor", "kitob"}]
+                      and not any(w.startswith(label) for label in ALIASES)]
     else:
         qualifiers = [w for w in words if w not in BRANDS]
     return tuple(aliases), brands, qualifiers[:5]
