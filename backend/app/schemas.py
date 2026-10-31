@@ -28,6 +28,7 @@ class AlertUpdate(StrictModel):
 
 class AssistantRequest(StrictModel):
     message: str = Field(min_length=2, max_length=1500)
+    history: list[str] = Field(default_factory=list, max_length=4)
 
 
 class ProfileUpdate(StrictModel):
