@@ -25,6 +25,31 @@
       ]
     },
     {
+      "source": "texnomart",
+      "enabled": true,
+      "pages_per_query": 1,
+      "queries": [
+        "smartfon",
+        "noutbuk",
+        "televizor",
+        "konditsioner",
+        "muzlatgich",
+        "changyutgich"
+      ]
+    },
+    {
+      "source": "idea",
+      "enabled": true,
+      "queries": [
+        "samsung",
+        "artel",
+        "televizor",
+        "muzlatgich",
+        "changyutgich",
+        "konditsioner"
+      ]
+    },
+    {
       "source": "asaxiy",
       "enabled": true,
       "discover": true,
