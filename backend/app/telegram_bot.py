@@ -32,17 +32,16 @@ router.callback_query.filter(F.message.chat.type == "private")
 MENU = [
     ["🛍 Katalog", "🔎 Mahsulot qidirish"],
     ["💰 Eng arzon mahsulotlar", "🔥 Chegirmalar"],
-    ["🧺 Eng arzon savatcha", "📷 Shtrix-kod"],
-    ["🤖 AI xarid yordamchisi", "📸 Rasm bilan qidirish"],
+    ["🧺 Eng arzon savatcha", "🤖 AI xarid yordamchisi"],
     ["🔔 Narx kuzatuvlari", "❤️ Sevimlilarim"],
-    ["⚖️ AI bilan solishtirish", "📊 Narxlar tarixi"],
-    ["🎁 Bonuslar", "👤 Profilim"],
-    ["⚙️ Sozlamalar", "☎️ Yordam"],
+    ["📊 Narxlar tarixi", "🎁 Bonuslar"],
+    ["👤 Profilim", "⚙️ Sozlamalar"],
+    ["☎️ Yordam"],
 ]
 keyboard = ReplyKeyboardMarkup(
     keyboard=[[KeyboardButton(text=t) for t in row] for row in MENU],
     resize_keyboard=True,
-    input_field_placeholder="Mahsulot nomi yoki shtrix-kodni yozing",
+    input_field_placeholder="Mahsulot nomi yoki modelini yozing",
 )
 
 
@@ -160,7 +159,7 @@ async def start(message: Message, state: FSMContext):
         "🛍 <b>ENG ARZON NARX BOT PRO</b>\n\n"
         "Mahsulotni toping, narxlarni solishtiring va savatchangizni tejab yig‘ing.\n"
         "Katalogdagi demo ma’lumotlar alohida belgilangan.\n\n"
-        "Mahsulot nomi, model yoki shtrix-kodni yozing. /help — buyruqlar.",
+        "Mahsulot nomi yoki modelini yozing. /help — buyruqlar.",
         reply_markup=keyboard,
     )
     if miniapp():
@@ -182,7 +181,6 @@ async def help_command(message: Message, state: FSMContext):
         "/alerts — kuzatuvlar\n"
         "/unwatch 1 — 1-ID kuzatuvni o‘chirish\n"
         "/history 1 — narx tarixi va olish/kutish tahlili\n"
-        "/barcode KOD — shtrix-kod bo‘yicha qidirish\n"
         "/catalog — mahsulot katalogi\n"
         "/basket 1,2,3,4,5 — ID’lardan eng arzon savatcha\n"
         "/ai MATN — katalogga asoslangan oddiy yordamchi\n"
