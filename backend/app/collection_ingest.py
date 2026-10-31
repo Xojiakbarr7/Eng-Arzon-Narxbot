@@ -18,6 +18,8 @@ SOURCES = {
     "uzum": ("Uzum Market", "uzum.uz"),
     "olx": ("OLX", "www.olx.uz"),
     "olcha": ("Olcha", "olcha.uz"),
+    "texnomart": ("Texnomart", "texnomart.uz"),
+    "idea": ("IDEA", "idea.uz"),
 }
 
 
