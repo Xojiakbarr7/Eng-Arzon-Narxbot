@@ -145,5 +145,5 @@ def test_bounded_collector_keeps_cheaper_goods_across_categories(monkeypatch):
     assert {item.category_slug for item in items} == {
         "elektronika", "kitob", "sport"
     }
-    assert {item.price for item in items} == {100000, 200000}
+    assert {item.price for item in items} == {100000}  # two cheapest observed pages per category
     assert len(requests) == 7  # robots + two pages for each category
