@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     ai_provider: str = "gemini"  # gemini (default) or openai
     ai_enabled: bool = False  # No external AI calls without opt-in
     ai_model: str = "gpt-6-luna"  # Used only when AI_PROVIDER=openai
-    gemini_model: str = "gemini-2.5-flash-lite"  # Free-tier supported (subject to quotas)
+    gemini_model: str = "gemini-3.5-flash-lite"  # Current default for new Gemini API projects
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173,http://localhost:8080"
     init_data_ttl_seconds: int = 3600
     offer_max_age_hours: int = 48
