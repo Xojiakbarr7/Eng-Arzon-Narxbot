@@ -30,6 +30,7 @@ from .schemas import (
 from .security import current_user, is_admin_user, require_admin, require_internal
 from .telegram_webhook import enable_webhook, disable_webhook, telegram_update
 from .daily_worker import DailySettings, serve, flag
+from .ai_shopping import shopping_reply
 from .seed import seed_catalog
 from .services import (
     REGIONS, aware, history_for, is_stale, optimize_basket,
