@@ -1,17 +1,27 @@
 {
   "max_pages_per_source": 40,
-  "max_items_per_source": 200,
+  "max_items_per_source": 420,
   "request_delay_seconds": 2,
   "sources": [
     {
       "source": "olcha",
       "enabled": true,
-      "pages_per_category": 3,
+      "pages_per_category": 2,
       "categories": [
         "telefony",
+        "tekhnika-dlya-kukhni",
+        "sporttovary",
+        "krasota-i-zdorove",
+        "avtomobilnye-aksessuary",
+        "mebel",
+        "knigi",
+        "mebel-1",
+        "vse-dlya-remonta-i-stroitelstva",
         "noutbuki",
         "televizory",
-        "konditsionery"
+        "konditsionery",
+        "stiralnye-mashiny",
+        "podarki-i-suveniry"
       ]
     },
     {
