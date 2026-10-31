@@ -275,3 +275,57 @@ def test_telegram_owner_gets_admin_role_and_management_requires_verified_identit
     assert client.post("/api/admin/categories", headers=stranger, json={
         "name": "Keraksiz", "slug": "forbidden-2026", "emoji": "🛍"
     }).status_code == 403
+
+
+def test_ai_shopping_api_selects_fresh_real_offers_and_compares_brands(ctx, monkeypatch):
+    client, sessions = ctx
+    settings = get_settings()
+    monkeypatch.setattr(settings, "ai_enabled", False)
+    monkeypatch.setattr(settings, "openai_api_key", "")
+    samsung = client.post("/api/admin/products", headers=ADMIN, json={
+        "name": "Smartfon Samsung Galaxy A15 128GB", "slug": "test-samsung-a15",
+        "brand": "Samsung", "model": "Galaxy A15", "category_id": 1
+    }).json()["id"]
+    redmi = client.post("/api/admin/products", headers=ADMIN, json={
+        "name": "Smartfon Redmi Note 13 128GB", "slug": "test-redmi-note13",
+        "brand": "Redmi", "model": "Note 13", "category_id": 1
+    }).json()["id"]
+    with sessions() as db:
+        db.add(Offer(product_id=samsung, store_id=1, price=2_500_000, is_demo=False,
+                     in_stock=True, url="https://uzum.uz/uz/product/samsung-a15",
+                     updated_at=utcnow()))
+        db.add(Offer(product_id=redmi, store_id=3, price=2_100_000, is_demo=False,
+                     in_stock=True, url="https://olcha.uz/uz/product/redmi-note13",
+                     updated_at=utcnow()))
+        db.commit()
+    resp = client.post("/api/assistant", json={"message": "Samsung va Redmi telefonlarini solishtir"})
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["mode"] == "statistical"
+    assert len(payload["comparison"]) >= 2
+    observed = {p["name"]: p["price"] for p in payload["comparison"]}
+    assert observed["Smartfon Samsung Galaxy A15 128GB"] == 2_500_000
+    assert observed["Smartfon Redmi Note 13 128GB"] == 2_100_000
+    assert all(x["url"].startswith("https://") for x in payload["comparison"])
+    assert "2 100 000" in payload["answer"]
+    small = client.post("/api/assistant", json={"message": "1 milliongacha telefon"}).json()
+    assert all(p["min_price"] <= 1_000_000 for p in small["products"])
+    again = client.post("/api/assistant", json={
+        "message": "qaysi biri arzonroq", "history": ["Samsung va Redmi telefonlarini solishtir"]
+    }).json()
+    assert len(again["comparison"]) >= 2
+
+
+def test_ai_shopping_does_not_report_stale_or_out_of_stock_prices(ctx):
+    client, sessions = ctx
+    pid = create_real(client)
+    with sessions() as db:
+        db.add(Offer(product_id=pid, store_id=1, price=1000, is_demo=False, in_stock=False,
+                     url="https://uzum.uz/uz/product/missing", updated_at=utcnow()))
+        db.add(Offer(product_id=pid, store_id=3, price=1, is_demo=False, in_stock=True,
+                     url="https://olcha.uz/uz/product/expired",
+                     updated_at=utcnow() - timedelta(days=12)))
+        db.commit()
+    result = client.post("/api/assistant", json={"message": "Real canonical test 128GB"}).json()
+    assert all(x["product_id"] != pid for x in result["comparison"])
+    assert "topilmadi" in result["answer"]
