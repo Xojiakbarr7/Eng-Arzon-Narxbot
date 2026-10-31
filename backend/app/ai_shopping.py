@@ -26,6 +26,8 @@ STOPWORDS = {
     "va", "yoki", "ham", "menga", "mavjud", "olish", "yaxshimi", "qanday",
     "mumkin", "chiq", "chiqar", "necha", "pul", "so'm", "som", "sum",
     "nima", "bor", "xohlayman", "tavsiya", "qil", "qilib", "olaman", "do'konlardan",
+    "shu", "shular", "shulardan", "shularni", "ikkisi", "ikkisidan", "biri", "qaysinisi",
+    "arzonroq", "qimmatroq", "endi", "olishim", "maqul", "ma'qul", "bo'ladi",
 }
 ALIASES = {
     "telefon": ("telefon", "smartfon", "iphone", "galaxy", "redmi", "poco"),
@@ -43,7 +45,7 @@ BRANDS = {"samsung", "redmi", "xiaomi", "iphone", "apple", "artel", "lenovo",
           "asus", "acer", "huawei", "honor", "lg", "vivo", "infinix", "poco", "hp"}
 COMPARE = re.compile(r"\b(solishtir|solishtirish|taqqosla|taqqoslash|farqi|farq|versus|vs)\b", re.I)
 AMOUNTS = re.compile(r"(\d+(?:[.,]\d+)?)\s*(million|milliongacha|mln|mlngacha|млн|ming|minggacha|тыс)\b", re.I)
-SUM = re.compile(r"(\d[\d\s]{3,})\s*(so['‘’]?m|sum|сум|gacha|gachasi)\b", re.I)
+SUM = re.compile(r"(\d[\d\s]{3,})\s*(so['‘’]?m(?:ga|gacha)?|sum|сум|gacha|gachasi)\b", re.I)
 WORDS = re.compile(r"[a-zа-яё0-9]+", re.I)
 
 
@@ -61,7 +63,7 @@ def parse_budget(message: str):
 def search_terms(message: str):
     lowered = message.casefold()
     aliases = next((values for label, values in ALIASES.items()
-                    if re.search(r"\b" + re.escape(label) + r"\b", lowered)), ())
+                    if re.search(r"\b" + re.escape(label) + r"[a-z‘’\-]{0,9}\b", lowered)), ())
     # Compare two brands by OR; if none specified use the user's non-stop words.
     brands = [brand for brand in BRANDS if re.search(r"\b" + re.escape(brand) + r"\b", lowered)]
     cleaned = AMOUNTS.sub(" ", lowered)
