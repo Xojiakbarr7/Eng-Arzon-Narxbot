@@ -228,6 +228,6 @@ async def shopping_reply(db, user, message, history=()):
         "comparison": comparison,
         "notice": ("AI javobi katalogdagi takliflarga tayangan. Narxlar va havolalar bazadan olingan; "
                    "do‘konda yakuniy narxni tekshiring.") if text else
-                  ("Generativ AI ulanmagan yoki vaqtincha ishlamayapti; "
+                  ("Hozir generativ AI ulanmagan yoki vaqtincha ishlamayapti; "
                    "katalogdagi narxlar asosida qoidaviy yordamchi javob berdi."),
     }
