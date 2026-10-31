@@ -235,6 +235,12 @@ async def collect_sources(config_path):
         for source_config in config.get("sources", []):
             source = source_config.get("source")
             if not source_config.get("enabled", False): continue
+            if source in ("texnomart", "idea"):
+                from .retailer_sources import collect_retailer
+                products, report = await collect_retailer(source, source_config, delay=delay, max_items=item_limit)
+                results.extend(products)
+                reports.append(report)
+                continue
             if source == "olcha":
                 from .olcha_source import collect_olcha
                 products, report = await collect_olcha(source_config, delay=delay, max_items=item_limit)
