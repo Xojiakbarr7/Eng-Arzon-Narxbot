@@ -163,11 +163,14 @@ Bot foydalanuvchining `3 milliongacha telefon topib ber`, `Samsung va Redmi tele
 
 Yordamchi OpenAI **Responses API** bilan ixtiyoriy ishlaydi. LLM faqat katalogdagi tanlangan mahsulotlarni qisqacha tushuntiradi; raqamli narxlar va havolalar doimo bazadan keladi. Xato, limit yoki API kaliti bo‘lmasa, to‘g‘ridan-to‘g‘ri katalogdan olinadigan qoidaviy taqqoslash ishlaydi va `mode: statistical` qaytadi. Botning `/ai` buyrug‘i va Mini App’dagi AI yordamchi orqali ishlaydi; oddiy “eng arzon” kabi xabarlar ham yordamchiga yuboriladi.
 
-**Render backend > Environment** da ushbu qiymatlarni o‘rnating:
-```
-OPENAI_API_KEY=<o'zingizning maxfiy kalitingiz, bu faylga yoki GitHub'ga yozmang>
+**Bepul Gemini ulash:** [Google AI Studio API Keys](https://aistudio.google.com/app/apikey) sahifasida yangi API kalit yarating. Render > `eng-arzon-narxbot-2` (backend) > **Environment** da quyidagilarni o‘rnating:
+```dotenv
 AI_ENABLED=true
-AI_MODEL=gpt-6-luna
+AI_PROVIDER=gemini
+GEMINI_API_KEY=<Google AI Studio'dan yaratilgan, maxfiy kalit>
+GEMINI_MODEL=gemini-2.5-flash-lite
 ```
-`AI_ENABLED=false` dastlabki xavfsiz sozlama: **kalit bo‘lmaguncha haqiqiy generativ AI yoqilmaydi**. OpenAI API alohida pullik xizmat; foydalanish va to‘lov limitlarini OpenAI Platform’da o‘rnating. Kalitni Telegram yoki Mini App foydalanuvchilariga uzatmang. Javoblar `store=false` bilan yuboriladi. Buyurtma berish va onlayn do‘konlarni mustaqil kezib chiqish funksiyasi yo‘q — faqat import qilingan katalogda qidiradi. Ma’lumotlar yangilanishi ikki soatlik katalog yig‘ishiga bog‘liq.
+Kalitni **faqat backend**ga kiriting; GitHub, `.env.example`, Telegram chat yoki Mini App'ga joylamang. Gemini 2.5 Flash-Lite'ning bepul rejimida so‘rovlar limiti bor; limit tugaganda yoki kalit mavjud bo‘lmasa, katalog asosida taqqoslash davom etadi. Bepul rejimga yuborilgan so‘rovlar Google tomonidan mahsulotlarini yaxshilash maqsadida ishlatilishi mumkin. Billing yoqilgan Google loyihasi bepul rejim o‘rniga pullik tarifdan foydalanishi mumkin, shuning uchun Google AI Studio'da loyiha holatini tekshiring.
+
+Ilgari mavjud pullik OpenAI xizmatidan foydalanmoqchi bo‘lsangiz, `AI_PROVIDER=openai`, `OPENAI_API_KEY=...`, `AI_MODEL=...` sozlang. Bir vaqtning o‘zida faqat tanlangan provayder ishlaydi. `AI_ENABLED=false` hech qaysi modelga so‘rov yubormaydi. Buyurtma berish yoki katalogdan tashqarida mustaqil internet qidiruvi yo‘q. Katalog har ikki soatda yangilanadi; AI narx yoki havolani o‘zi yaratmaydi.
 
