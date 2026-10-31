@@ -155,3 +155,19 @@ Set-Location ..
 Backup fayllari maxfiy ma’lumotlarni o‘z ichiga olishi mumkin; `backups/` Git’dan chiqarilgan. Avtomatik jadvalni serverda cron yoki Windows Task Scheduler bilan `backup.ps1`ga belgilang. Backup’ni davriy qayta tiklab tekshiring.
 
 Keyingi ma’lumotlar: [API](docs/api.md), [do‘kon ulash](docs/integrations.md), [joylash](docs/deployment.md), [MVP tekshirish ro‘yxati](docs/checklist.md).
+
+
+## 🤖 AI xarid yordamchisi (Telegram va Mini App)
+
+Bot foydalanuvchining `3 milliongacha telefon topib ber`, `Samsung va Redmi telefonlarini solishtir` kabi oddiy o‘zbekcha so‘rovlarini qabul qiladi. SQL katalogidan faqat **mavjud, eskirmagan, demo bo‘lmagan, real HTTPS xarid havolali** takliflar tanlanadi; mahsulot nomi, kuzatilgan naqd narx, do‘kon va havola server tomonidan qaytariladi. AI hech qachon o‘zi narx yoki xarid havolasini yaratmaydi.
+
+Yordamchi OpenAI **Responses API** bilan ixtiyoriy ishlaydi. LLM faqat katalogdagi tanlangan mahsulotlarni qisqacha tushuntiradi; raqamli narxlar va havolalar doimo bazadan keladi. Xato, limit yoki API kaliti bo‘lmasa, to‘g‘ridan-to‘g‘ri katalogdan olinadigan qoidaviy taqqoslash ishlaydi va `mode: statistical` qaytadi. Botning `/ai` buyrug‘i va Mini App’dagi AI yordamchi orqali ishlaydi; oddiy “eng arzon” kabi xabarlar ham yordamchiga yuboriladi.
+
+**Render backend > Environment** da ushbu qiymatlarni o‘rnating:
+```
+OPENAI_API_KEY=<o'zingizning maxfiy kalitingiz, bu faylga yoki GitHub'ga yozmang>
+AI_ENABLED=true
+AI_MODEL=gpt-6-luna
+```
+`AI_ENABLED=false` dastlabki xavfsiz sozlama: **kalit bo‘lmaguncha haqiqiy generativ AI yoqilmaydi**. OpenAI API alohida pullik xizmat; foydalanish va to‘lov limitlarini OpenAI Platform’da o‘rnating. Kalitni Telegram yoki Mini App foydalanuvchilariga uzatmang. Javoblar `store=false` bilan yuboriladi. Buyurtma berish va onlayn do‘konlarni mustaqil kezib chiqish funksiyasi yo‘q — faqat import qilingan katalogda qidiradi. Ma’lumotlar yangilanishi ikki soatlik katalog yig‘ishiga bog‘liq.
+
