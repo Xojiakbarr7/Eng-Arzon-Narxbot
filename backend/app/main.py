@@ -375,8 +375,9 @@ def basket(data: BasketRequest, db: Session = Depends(get_db), user: User = Depe
 async def assistant(data: AssistantRequest, db: Session = Depends(get_db), user: User = Depends(current_user)):
     """Catalog-grounded shopping comparison; generative AI needs explicit key + opt-in."""
     cfg = get_settings()
-    if cfg.ai_enabled and cfg.openai_api_key:
-        # A paid model must not be callable at unlimited speed. Render currently
+    provider_ready = (cfg.ai_provider == "gemini" and bool(cfg.gemini_api_key)) or (cfg.ai_provider == "openai" and bool(cfg.openai_api_key))
+    if cfg.ai_enabled and provider_ready:
+        # LLM calls (including free quota) must not be unlimited. Render currently
         # runs one worker; per-user and process-wide quotas cover that deployment.
         now = monotonic()
         window = ai_user_windows.setdefault(user.id, deque())
