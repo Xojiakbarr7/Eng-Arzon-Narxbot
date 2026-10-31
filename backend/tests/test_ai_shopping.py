@@ -21,6 +21,10 @@ def test_budget_parser_and_search_terms():
     assert len(brands) == 2 and "samsung" in brands and "redmi" in brands
     assert "smartfon" in aliases
     assert all(t not in ("va", "solishtir") for t in terms)
+    a2, _, t2 = search_terms("3 million so‘mgacha eng arzon telefonni topib ber")
+    assert "smartfon" in a2 and not t2
+    a3, _, t3 = search_terms("Eng arzon noutbukni ko‘rsat")
+    assert "laptop" in a3 and not t3
 
 
 def test_fallback_price_is_real_observed_number():
