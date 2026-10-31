@@ -100,6 +100,29 @@ def day_key(now, settings):
     return f"{day}:slot-{slot:02d}:{destination}", day, destination
 
 
+def channel_post_window_open(now, settings):
+    """Only post near scheduled times, never on arbitrary deploy/restart.
+
+    For 2h schedule starting 09:00 Tashkent: 09, 11, 13, 15, ...
+    Five-minute grace allows catalog refresh to complete before posting.
+    A fresh deploy at e.g. 13:40 can therefore not resend the 13:00 batch.
+    """
+    local = aware(now).astimezone(TASHKENT)
+    hours = settings.channel_post_interval_hours
+    if hours == 24:
+        return local.hour == settings.hour and settings.minute <= local.minute < settings.minute + 5
+    return (local.hour - settings.hour) % hours == 0 and settings.minute <= local.minute < settings.minute + 5
+
+
+def channel_rotation_offset(now, settings):
+    """Stable global time-slot index: moves past 3 items each channel batch."""
+    local = aware(now).astimezone(TASHKENT)
+    hours = settings.channel_post_interval_hours
+    slot = (local.date().toordinal() * (24 // hours)
+            + ((local.hour - settings.hour) % 24) // hours)
+    return slot * settings.max_items
+
+
 def claim_day(sessions, now, settings):
     """Commit the unique claim before external requests, without a long DB lock."""
     key, day, destination = day_key(now, settings)
@@ -145,8 +168,13 @@ def safe_offer_url(value, source):
         return False
 
 
-def select_deals(db, product_ids, now, limit=10):
-    """Choose fresh, new, accepted observations; unknown shipping stays unknown."""
+def select_deals(db, product_ids, now, limit=10, *, rotation_offset=None, require_image=False):
+    """Choose fresh, new offers; rotate channel picks by stable product identities.
+
+    Catalog selection remains cheapest-first; channel rotation prevents identical
+    picks from being sent every interval even after a temporary DB is reset.
+    A permanent ledger is still required for strict cross-deployment idempotency.
+    """
     if not product_ids:
         return []
     rows = db.execute(
@@ -163,16 +191,20 @@ def select_deals(db, product_ids, now, limit=10):
             continue
         if not now - timedelta(hours=48) <= aware(offer.updated_at) <= now + timedelta(minutes=5) or offer.price <= 0:
             continue
+        if require_image and not safe_image_url(product.image_url):
+            continue
         price_data = product_summary(db, product)
         deal = {"product_id": product.id, "name": product.name, "price": offer.price,
                 "store": store.name, "url": offer.url, "category": category.name,
                 "category_id": category.id, "source": source,
                 "image_url": product.image_url if safe_image_url(product.image_url) else None,
-                "discount_percent": price_data["discount_percent"], "old_price": price_data["old_price"]}
+                "discount_percent": price_data["discount_percent"], "old_price": price_data["old_price"],
+                "stable_id": product.slug}
         if product.id not in by_product or offer.price < by_product[product.id]["price"]:
             by_product[product.id] = deal
     categories = defaultdict(list)
-    for deal in sorted(by_product.values(), key=lambda item: (-item["discount_percent"], item["price"], item["product_id"])):
+    # Order must not depend on auto-incremented IDs that reset with SQLite.
+    for deal in sorted(by_product.values(), key=lambda item: (-item["discount_percent"], item["price"], item["stable_id"])):
         categories[deal["category_id"]].append(deal)
     keys = sorted(categories)
     if keys:
@@ -180,15 +212,23 @@ def select_deals(db, product_ids, now, limit=10):
         keys = keys[offset:] + keys[:offset]
     result = []
     # One per category first; remaining slots use the next cheapest in turn.
-    while keys and len(result) < max(1, min(10, limit)):
+    pool_size = len(by_product) if rotation_offset is not None else max(1, min(10, limit))
+    while keys and len(result) < pool_size:
         next_keys = []
         for key in keys:
-            if len(result) >= max(1, min(10, limit)):
+            if len(result) >= pool_size:
                 break
             result.append(categories[key].pop(0))
             if categories[key]:
                 next_keys.append(key)
         keys = next_keys
+    if rotation_offset is not None and result:
+        # Absolute slot number, not process memory. Restarting the app or
+        # rebuilding an identical catalog in the same/different slot keeps a
+        # deterministic order without relying on resettable primary keys.
+        offset = rotation_offset % len(result)
+        result = result[offset:] + result[:offset]
+        result = result[:max(1, min(10, limit))]
     return result
 
 
@@ -300,7 +340,9 @@ async def run_cycle(settings, *, now=None, sessions=SessionLocal, collector=None
                 prior_ids = recently_posted_ids(db, settings.channel, completed_at, settings.repost_after_days)
                 eligible_ids = [product_id for product_id in eligible_ids if product_id not in prior_ids]
                 log.warning("Channel post candidates after dedupe: %d", len(eligible_ids))
-            deals = select_deals(db, eligible_ids, completed_at, settings.max_items)
+            deals = select_deals(db, eligible_ids, completed_at, settings.max_items,
+                                 rotation_offset=channel_rotation_offset(now, settings) if settings.post_enabled and publisher is None else None,
+                                 require_image=settings.post_enabled and publisher is None)
         postable = [deal for deal in deals if safe_image_url(deal.get("image_url"))]
         message = render_digest(deals, completed_at)
         log.warning("Catalog import: imported=%d, selected=%d", stats.get("imported", 0), len(deals))
@@ -351,7 +393,7 @@ async def serve(settings):
     catalog_settings = replace(settings, post_enabled=False)
     while True:
         for task, active_settings in (("catalog", catalog_settings), ("channel", settings)):
-            if task == "channel" and (not settings.post_enabled or (settings.channel_post_interval_hours == 24 and not is_due(utcnow(), settings))):
+            if task == "channel" and (not settings.post_enabled or not channel_post_window_open(utcnow(), settings)):
                 continue
             slot_key = day_key(utcnow(), active_settings)[0]
             if previous.get(task, (None, None))[0] == slot_key:
