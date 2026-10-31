@@ -33,6 +33,7 @@ export default function App(){
  const [basket,setBasket]=useState<BasketResult|null>(null),[basketBusy,setBasketBusy]=useState(false)
  const [message,setMessage]=useState(''),[answer,setAnswer]=useState<{answer:string;products:Product[];mode:string}|null>(null),[assistantBusy,setAssistantBusy]=useState(false)
  const [adminToken,setAdminToken]=useState(''),[adminStats,setAdminStats]=useState<Record<string,unknown>|null>(null),[adminBusy,setAdminBusy]=useState(false),[csvFile,setCsvFile]=useState<File|null>(null),[importResult,setImportResult]=useState<Record<string,unknown>|null>(null),[csvText,setCsvText]=useState('')
+ const dialogRef=useRef<HTMLDivElement>(null)
  const profileWrite=useRef<Promise<unknown>>(Promise.resolve()),profileVersion=useRef(0),savedProfile=useRef('')
  const t=(key:string)=>dictionary[key]?.[lang==='ru'?1:0]||key
  const notify=useCallback((msg:string)=>setToast(msg),[])
