@@ -27,7 +27,7 @@ from .schemas import (
     CategoryRequest, CsvImportRequest, NotificationAck, ProductRequest,
     ProfileUpdate, StoreUpdate,
 )
-from .security import current_user, require_admin, require_internal
+from .security import current_user, is_admin_user, require_admin, require_internal
 from .telegram_webhook import enable_webhook, disable_webhook, telegram_update
 from .daily_worker import DailySettings, serve, flag
 from .seed import seed_catalog
@@ -97,6 +97,7 @@ def as_profile(user: User):
         "id": user.id,
         "telegram_id": user.telegram_id,
         "first_name": user.first_name,
+        "is_admin": bool(user.telegram_id.isascii() and user.telegram_id.isdecimal() and is_admin_user(int(user.telegram_id))),
         "language": user.language,
         "region": user.region,
         "notifications_enabled": user.notifications_enabled,
@@ -399,6 +400,40 @@ def admin_stats(db: Session = Depends(get_db)):
     models = {"products": Product, "categories": Category, "stores": Store,
               "offers": Offer, "users": User, "alerts": PriceAlert, "imports": ImportJob}
     return {name: db.scalar(select(func.count()).select_from(model)) for name, model in models.items()}
+
+
+@app.get("/api/admin/overview", dependencies=[Depends(require_admin)])
+def admin_overview(db: Session = Depends(get_db)):
+    """Private operational view. The signature and admin allowlist are checked by require_admin."""
+    stores = db.scalars(select(Store).order_by(Store.name)).all()
+    store_rows = []
+    for store in stores:
+        live_offers = db.scalar(select(func.count()).select_from(Offer).where(
+            Offer.store_id == store.id, Offer.is_demo.is_(False),
+            Offer.in_stock.is_(True)
+        )) or 0
+        store_rows.append({
+            "id": store.id, "name": store.name, "slug": store.slug,
+            "active_offers": live_offers,
+            "delivery_fee": store.delivery_fee,
+            "free_delivery_threshold": store.free_delivery_threshold,
+            "adapter_status": store.adapter_status,
+        })
+    runs = db.scalars(select(DailyRun).where(
+        DailyRun.destination == "catalog"
+    ).order_by(DailyRun.created_at.desc(), DailyRun.id.desc()).limit(3)).all()
+    return {
+        "stores": store_rows,
+        "recent_collections": [{
+            "status": run.status,
+            "at": aware(run.updated_at).isoformat(),
+            "sources": [{
+                "source": r.get("source", ""),
+                "items": r.get("items", 0),
+                "errors": r.get("errors", []),
+            } for r in (run.source_report or []) if isinstance(r, dict) and r.get("source")],
+        } for run in runs],
+    }
 
 
 @app.post("/api/admin/categories", status_code=201, dependencies=[Depends(require_admin)])
