@@ -329,3 +329,25 @@ def test_ai_shopping_does_not_report_stale_or_out_of_stock_prices(ctx):
     result = client.post("/api/assistant", json={"message": "Real canonical test 128GB"}).json()
     assert all(x["product_id"] != pid for x in result["comparison"])
     assert "topilmadi" in result["answer"]
+
+
+def test_ai_readiness_never_leaks_gemini_key(ctx, monkeypatch):
+    client, _ = ctx
+    settings = get_settings()
+    monkeypatch.setattr(settings, "ai_enabled", True)
+    monkeypatch.setattr(settings, "ai_provider", "gemini")
+    monkeypatch.setattr(settings, "gemini_api_key", "")
+    monkeypatch.setattr(settings, "gemini_model", "gemini-3.5-flash-lite")
+    result = client.get("/api/assistant/status")
+    assert result.status_code == 200
+    status = result.json()
+    assert not status["key_configured"] and not status["ready"]
+    assert status["model"] == "gemini-3.5-flash-lite"
+    assert "GEMINI_API_KEY" in status["message"]
+    monkeypatch.setattr(settings, "gemini_api_key", "VERY-SECRET-DO-NOT-LOG")
+    status = client.get("/api/assistant/status").json()
+    assert status["key_configured"] and status["ready"]
+    assert "VERY-SECRET" not in json.dumps(status)
+    assert "Google" in status["message"]
+    monkeypatch.setattr(settings, "ai_enabled", False)
+    assert not client.get("/api/assistant/status").json()["ready"]
