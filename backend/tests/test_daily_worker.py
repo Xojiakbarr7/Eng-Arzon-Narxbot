@@ -8,7 +8,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.db import Base
-from app.daily_worker import DailySettings, DeliveryError, claim_day, day_key, is_due, render_digest, run_cycle, select_deals, telegram_units
+from app.daily_worker import DailySettings, DeliveryError, claim_day, day_key, is_due, render_digest, run_cycle, select_deals, telegram_units, channel_post_window_open, channel_rotation_offset
 from app.models import Category, DailyRun, Offer, Product, Store
 
 
@@ -322,3 +322,63 @@ def test_channel_two_hour_setting_from_environment(monkeypatch):
     monkeypatch.setenv("CHANNEL_POST_INTERVAL_HOURS", "5")
     with pytest.raises(ValueError, match="CHANNEL_POST_INTERVAL_HOURS"):
         DailySettings.from_env()
+
+
+
+def test_channel_post_window_is_not_open_on_arbitrary_server_redeploy():
+    settings = DailySettings(
+        enabled=True, post_enabled=True, channel="@mychannel",
+        hour=9, minute=0, channel_post_interval_hours=2, max_items=3,
+    )
+    def local(hour, minute, day=31):
+        return datetime(2026, 10, day, hour - 5 if hour >= 5 else hour + 19, minute,
+                        tzinfo=timezone.utc) if hour >= 5 else datetime(
+                            2026, 10, day - 1, hour + 19, minute, tzinfo=timezone.utc)
+    assert channel_post_window_open(local(9, 0), settings)
+    assert channel_post_window_open(local(11, 4), settings)
+    assert channel_post_window_open(local(13, 0), settings)
+    assert not channel_post_window_open(local(13, 12), settings)
+    assert not channel_post_window_open(local(14, 1), settings)
+    assert not channel_post_window_open(local(11, 7), settings)
+
+
+def test_rotation_index_changes_each_two_hours_across_midnight():
+    settings = DailySettings(
+        enabled=True, post_enabled=True, channel="@mychannel", hour=9,
+        channel_post_interval_hours=2, max_items=3,
+    )
+    # These are UTC, corresponding to Tashkent local 23:00, 01:00, 03:00.
+    a = datetime(2026, 10, 30, 18, tzinfo=timezone.utc)
+    b = a + timedelta(hours=2)
+    c = b + timedelta(hours=2)
+    assert channel_rotation_offset(b, settings) == channel_rotation_offset(a, settings) + 3
+    assert channel_rotation_offset(c, settings) == channel_rotation_offset(b, settings) + 3
+    assert channel_rotation_offset(a + timedelta(minutes=3), settings) == channel_rotation_offset(a, settings)
+
+
+def test_channel_rotates_three_distinct_photos_even_without_saved_post_history(sessions):
+    # A test for the Render SQLite-wipe scenario: the old per-post ledger is gone,
+    # yet consecutive time-slots must not choose the same first three products.
+    with sessions() as db:
+        ids = [add_offer(db, n, image=f"https://cdn.asaxiy.uz/{n}.jpg", price=100 + n)
+               for n in range(100, 124)]
+        missing_photo = add_offer(db, 124, price=1)
+        db.commit()
+        first_slot = datetime(2026, 10, 29, 4, tzinfo=timezone.utc)
+        second_slot = first_slot + timedelta(hours=2)
+        settings = DailySettings(
+            enabled=True, post_enabled=True, channel="@mychannel", token="test-only",
+            channel_post_interval_hours=2, max_items=3,
+        )
+        one = select_deals(db, ids + [missing_photo], first_slot, limit=3,
+                           rotation_offset=channel_rotation_offset(first_slot, settings),
+                           require_image=True)
+        two = select_deals(db, ids + [missing_photo], second_slot, limit=3,
+                           rotation_offset=channel_rotation_offset(second_slot, settings),
+                           require_image=True)
+    assert len(one) == len(two) == 3
+    assert {item["stable_id"] for item in one}.isdisjoint(
+        {item["stable_id"] for item in two}
+    )
+    assert all(item["image_url"] for item in one + two)
+    assert missing_photo not in {item["product_id"] for item in one + two}
