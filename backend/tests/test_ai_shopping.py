@@ -120,7 +120,7 @@ def test_gemini_rest_sends_only_catalog_data_and_never_generates_prices(monkeypa
     monkeypatch.setattr(cfg, "ai_enabled", True)
     monkeypatch.setattr(cfg, "ai_provider", "gemini")
     monkeypatch.setattr(cfg, "gemini_api_key", "test-gemini-auth-key")
-    monkeypatch.setattr(cfg, "gemini_model", "gemini-2.5-flash-lite")
+    monkeypatch.setattr(cfg, "gemini_model", "gemini-3.5-flash-lite")
     assert configured_ai_provider() == "gemini"
     calls = []
     returned = ["Variantlarni katalogdagi narxlari bo‘yicha solishtiring. Xarid oldidan do‘konda tekshiring."]
@@ -129,7 +129,7 @@ def test_gemini_rest_sends_only_catalog_data_and_never_generates_prices(monkeypa
         calls.append(request)
         assert request.method == "POST"
         assert str(request.url) == (
-            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent"
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent"
         )
         assert request.headers.get("x-goog-api-key") == "test-gemini-auth-key"
         assert "test-gemini-auth-key" not in str(request.url)
@@ -185,4 +185,4 @@ def test_gemini_rejects_unknown_models_without_dialing_custom_hosts(monkeypatch)
     assert asyncio.run(ai_explanation("telefon", [{
         "name":"Real smartfon", "price":150000, "store":"Olcha"
     }])) is None
-    assert called == ["https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent"]
+    assert called == ["https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent"]
