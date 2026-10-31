@@ -24,6 +24,15 @@ CATEGORY_MAP = {
     "noutbuki": "elektronika",
     "konditsionery": "maishiy-texnika",
     "stiralnye-mashiny": "maishiy-texnika",
+    "tekhnika-dlya-kukhni": "maishiy-texnika",
+    "sporttovary": "sport",
+    "krasota-i-zdorove": "gozallik",
+    "avtomobilnye-aksessuary": "avto",
+    "mebel": "uy-mebel",
+    "mebel-1": "uy-mebel",
+    "knigi": "kitob",
+    "vse-dlya-remonta-i-stroitelstva": "qurilish",
+    "podarki-i-suveniry": "uy-mebel",
 }
 SLUG = re.compile(r"^[a-z0-9][a-z0-9-]{2,180}$")
 PER_PAGE = 20
@@ -91,8 +100,10 @@ async def collect_olcha(source_config, *, delay=2.0, max_items=100):
     requested = source_config.get("categories", ["telefony"])
     if not isinstance(requested, list):
         requested = []
-    categories = [slug for slug in requested if isinstance(slug, str) and slug in CATEGORY_MAP][:5]
+    categories = list(dict.fromkeys(slug for slug in requested if isinstance(slug, str) and slug in CATEGORY_MAP))[:20]
     pages_per_category = max(1, min(int(source_config.get("pages_per_category", 2)), 5))
+    # A few expensive electronics must not crowd out books, sport or household goods.
+    per_category_limit = max(1, max_items // max(1, len(categories)))
     delay = max(1.0, min(float(delay), 60.0))
     headers = {"User-Agent": USER_AGENT, "Accept": "application/json", "Accept-Language": "uz", "clientmodel": "web"}
     async with httpx.AsyncClient(timeout=25, follow_redirects=False, headers=headers,
@@ -110,6 +121,7 @@ async def collect_olcha(source_config, *, delay=2.0, max_items=100):
             report["errors"].append("robots_unavailable")
             return [], report
         for category in categories:
+            category_items = {}
             for page in range(1, pages_per_category + 1):
                 if len(results) >= max_items:
                     break
@@ -135,13 +147,16 @@ async def collect_olcha(source_config, *, delay=2.0, max_items=100):
                     report["pages"] += 1
                     batch = parse_products(data, category, datetime.now(timezone.utc))
                     for item in batch:
-                        if len(results) < max_items or item.reference in results:
-                            results[item.reference] = item
+                        category_items[item.reference] = item
                     if not batch:
                         break
                 except (ValueError, TypeError, httpx.HTTPError):
                     report["errors"].append("products_unavailable_or_invalid")
                     break
+            # Pick affordable observed listings first; keep every category represented.
+            for item in sorted(category_items.values(), key=lambda x: (not x.in_stock, x.price, x.reference))[:per_category_limit]:
+                if len(results) < max_items or item.reference in results:
+                    results[item.reference] = item
     report["items"] = len(results)
     if not results and not report["errors"]:
         report["errors"].append("no_eligible_product_offers")
