@@ -168,7 +168,7 @@ Yordamchi OpenAI **Responses API** bilan ixtiyoriy ishlaydi. LLM faqat katalogda
 AI_ENABLED=true
 AI_PROVIDER=gemini
 GEMINI_API_KEY=<Google AI Studio'dan yaratilgan, maxfiy kalit>
-GEMINI_MODEL=gemini-2.5-flash-lite
+GEMINI_MODEL=gemini-3.5-flash-lite
 ```
 Kalitni **faqat backend**ga kiriting; GitHub, `.env.example`, Telegram chat yoki Mini App'ga joylamang. Gemini 2.5 Flash-Lite'ning bepul rejimida so‘rovlar limiti bor; limit tugaganda yoki kalit mavjud bo‘lmasa, katalog asosida taqqoslash davom etadi. Bepul rejimga yuborilgan so‘rovlar Google tomonidan mahsulotlarini yaxshilash maqsadida ishlatilishi mumkin. Billing yoqilgan Google loyihasi bepul rejim o‘rniga pullik tarifdan foydalanishi mumkin, shuning uchun Google AI Studio'da loyiha holatini tekshiring.
 
