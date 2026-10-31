@@ -94,3 +94,56 @@ def test_olcha_public_json_is_importable_without_demo(monkeypatch):
         offer = db.scalar(select(Offer).where(Offer.product_id == product.id))
         assert offer.url.startswith("https://olcha.uz/ru/product/view/") and offer.price == 1_500_000
     engine.dispose()
+
+
+def test_category_map_has_non_electronics_catalog_options():
+    from app.olcha_source import CATEGORY_MAP
+    assert CATEGORY_MAP["knigi"] == "kitob"
+    assert CATEGORY_MAP["sporttovary"] == "sport"
+    assert CATEGORY_MAP["mebel-1"] == "uy-mebel"
+    assert CATEGORY_MAP["krasota-i-zdorove"] == "gozallik"
+    assert CATEGORY_MAP["avtomobilnye-aksessuary"] == "avto"
+    assert CATEGORY_MAP["vse-dlya-remonta-i-stroitelstva"] == "qurilish"
+
+
+def test_bounded_collector_keeps_cheaper_goods_across_categories(monkeypatch):
+    from app.olcha_source import CATEGORY_MAP
+    categories = ["telefony", "knigi", "sporttovary"]
+    requests = []
+
+    def reply(request):
+        requests.append(str(request.url))
+        if request.url.path == "/robots.txt":
+            return httpx.Response(200, text="User-agent: *\nAllow: /api/v2/products\n")
+        category = request.url.params["category"]
+        page = int(request.url.params["page"])
+        offset = categories.index(category) * 100 + page * 10
+        items = [
+            {
+                "id": offset + i,
+                "alias": f"product-{offset + i}",
+                "name_uz": f"{category} mahsuloti {i}",
+                "discount_price": (i + 1) * 100000,
+                "quantity": 5,
+                "main_image": "https://olcha.uz/image/original/products/test.jpg",
+            }
+            for i in range(4)
+        ]
+        return httpx.Response(200, json={"data": {"products": items}})
+
+    real_client = httpx.AsyncClient
+    monkeypatch.setattr("app.olcha_source.httpx.AsyncClient", lambda **kwargs: real_client(transport=httpx.MockTransport(reply), **kwargs))
+    async def no_delay(_): pass
+    monkeypatch.setattr("app.olcha_source.asyncio.sleep", no_delay)
+
+    items, report = asyncio.run(collect_olcha(
+        {"categories": categories, "pages_per_category": 2},
+        delay=1, max_items=6,
+    ))
+    assert report["pages"] == 6 and report["items"] == 6
+    assert len(items) == 6
+    assert {item.category_slug for item in items} == {
+        "elektronika", "kitob", "sport"
+    }
+    assert {item.price for item in items} == {100000, 200000}
+    assert len(requests) == 7  # robots + two pages for each category
