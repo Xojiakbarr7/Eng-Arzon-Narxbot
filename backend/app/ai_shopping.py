@@ -26,6 +26,7 @@ STOPWORDS = {
     "va", "yoki", "ham", "menga", "mavjud", "olish", "yaxshimi", "qanday",
     "mumkin", "chiq", "chiqar", "necha", "pul", "so'm", "som", "sum",
     "nima", "bor", "xohlayman", "tavsiya", "qil", "qilib", "olaman", "do'konlardan",
+    "ko", "rsat", "korsat", "korsating", "korsatingiz", "kor", "borsa", "mgacha",
     "shu", "shular", "shulardan", "shularni", "ikkisi", "ikkisidan", "biri", "qaysinisi",
     "arzonroq", "qimmatroq", "endi", "olishim", "maqul", "ma'qul", "bo'ladi",
 }
@@ -68,6 +69,8 @@ def search_terms(message: str):
     brands = [brand for brand in BRANDS if re.search(r"\b" + re.escape(brand) + r"\b", lowered)]
     cleaned = AMOUNTS.sub(" ", lowered)
     cleaned = SUM.sub(" ", cleaned)
+    cleaned = re.sub(r"\b(?:so[\u0027‘’]?m(?:gacha|ga)?|som(?:gacha|ga)?|sum|mln|million|ming|gacha|gachasi)\b", " ", cleaned)
+    cleaned = re.sub(r"\b(?:ko[\u0027‘’]?rsat|korsat|kursat|chiqarib)\b", " ", cleaned)
     words = [w for w in WORDS.findall(cleaned) if w not in STOPWORDS and len(w) > 1
              and w not in {"mln", "million", "ming", "gacha", "ta", "dan", "ga"}]
     if aliases:
