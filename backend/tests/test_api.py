@@ -238,3 +238,40 @@ def test_notifications_skip_demo_and_deduplicate_real_alert(ctx):
     assert client.post("/api/internal/notifications/claim", headers=internal).json()["items"] == []
     assert client.post(f"/api/internal/notifications/{items[0]['id']}/ack", headers=internal, json={"delivered": True}).status_code == 200
     assert client.post("/api/internal/notifications/claim", headers=internal).json()["items"] == []
+
+
+def test_telegram_owner_gets_admin_role_and_management_requires_verified_identity(ctx, monkeypatch):
+    client, _ = ctx
+    settings = get_settings()
+    monkeypatch.setattr(settings, "admin_telegram_ids", "6360020220")
+
+    def signed(uid):
+        fields = {"auth_date": str(int(time.time())), "user": json.dumps({"id": uid, "first_name": "User"})}
+        secret = hmac.new(b"WebAppData", b"test-bot-token", hashlib.sha256).digest()
+        message = "\n".join(f"{key}={value}" for key, value in sorted(fields.items()))
+        fields["hash"] = hmac.new(secret, message.encode(), hashlib.sha256).hexdigest()
+        return {"X-Telegram-Init-Data": urlencode(fields)}
+
+    owner = signed(6360020220)
+    stranger = signed(6360020221)
+    assert client.get("/api/profile", headers=owner).json()["is_admin"] is True
+    assert client.get("/api/profile", headers=stranger).json()["is_admin"] is False
+    assert client.get("/api/profile").json()["is_admin"] is False
+    assert client.get("/api/admin/overview").status_code == 401
+    assert client.get("/api/admin/overview", headers=stranger).status_code == 403
+    assert client.get("/api/admin/overview", headers=owner).status_code == 200
+    overview = client.get("/api/admin/overview", headers=owner).json()
+    assert "stores" in overview and len(overview["stores"]) > 0
+    assert "recent_collections" in overview
+
+    # A caller cannot pass a Telegram ID directly or forge a malformed signature.
+    assert client.get("/api/admin/overview", headers={"X-Telegram-User-Id": "6360020220"}).status_code == 401
+    assert client.get("/api/admin/overview", headers={"X-Telegram-Init-Data": "user=%7B%22id%22%3A6360020220%7D&hash=fake"}).status_code == 401
+
+    created = client.post("/api/admin/categories", headers=owner, json={
+        "name": "Yangi sinov toifasi", "slug": "sinov-yangi-2026", "emoji": "🛍"
+    })
+    assert created.status_code == 201
+    assert client.post("/api/admin/categories", headers=stranger, json={
+        "name": "Keraksiz", "slug": "forbidden-2026", "emoji": "🛍"
+    }).status_code == 403
