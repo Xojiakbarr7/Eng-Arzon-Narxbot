@@ -5,6 +5,7 @@ import time
 from urllib.parse import parse_qsl
 from fastapi import Depends, Header, HTTPException
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from .config import get_settings
 from .db import get_db
@@ -65,8 +66,17 @@ def current_user(
     if user is None:
         user = User(telegram_id=tid, first_name=name)
         db.add(user)
-        db.commit()
-        db.refresh(user)
+        try:
+            db.commit()
+        except IntegrityError:
+            # Mini App can send several requests before its first user is created.
+            # Another request may have inserted this same Telegram ID in parallel.
+            db.rollback()
+            user = db.scalar(select(User).where(User.telegram_id == tid))
+            if user is None:
+                raise
+        else:
+            db.refresh(user)
     return user
 
 

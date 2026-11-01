@@ -185,7 +185,7 @@ async def help_command(message: Message, state: FSMContext):
         "/basket 1,2,3,4,5 — ID’lardan eng arzon savatcha\n"
         "/ai MATN — katalogga asoslangan oddiy yordamchi\n"
         "/cancel — joriy kiritishni bekor qilish\n\n"
-        "Kamera Mini App ichida ishlaydi. To‘lov, rasmni AI bilan aniqlash va hamkor do‘konlarning jonli API’lari hali ulanmagan."
+        "Mahsulotni nomi yoki modeli bo‘yicha qidiring. Natijalarni xarid qilishdan oldin do‘konda tekshiring."
     )
 
 
@@ -290,8 +290,16 @@ async def history(message: Message, state: FSMContext, api: Api):
     await message.answer(f"<b>{escape(data['name'])}</b>\n\n<b>{escape(insight['title'])}</b>\n{escape(insight['explanation'])}\n\nNamunalar: {insight.get('sample_count', 0)} ta · {insight.get('span_days', 0)} kun\n" + ("🧪 Demo tarix asosidagi tahlil." if insight.get("is_demo") else "Saqlangan tarix asosidagi statistik tahlil; kelajak narxi kafolatlanmaydi."))
 
 
+@router.message(F.text.in_({"📷 Shtrix-kod", "📸 Rasm bilan qidirish", "⚖️ AI bilan solishtirish", "⚖️ Mahsulot solishtirish"}))
+async def outdated_menu_button(message: Message, state: FSMContext):
+    await state.clear()
+    await message.answer(
+        "Bu tugma yangi menyudan olib tashlangan. Pastdagi yangilangan menyudan foydalaning.",
+        reply_markup=keyboard,
+    )
+
+
 @router.message(Command("barcode"))
-@router.message(F.text == "📷 Shtrix-kod")
 async def barcode_command(message: Message, state: FSMContext, api: Api):
     await state.clear()
     code = (message.text or "").partition(" ")[2].strip() if message.text.startswith("/") else ""
@@ -411,12 +419,6 @@ async def catalog(message: Message, state: FSMContext, api: Api):
         await message.answer(f"Keyingi sahifa: <code>/catalog {page + 1}</code>\nSavatcha: <code>/basket 1,2,3,4,5</code> — o‘zingiz tanlagan ID’larni yozing.")
 
 
-@router.message(F.text == "⚖️ AI bilan solishtirish")
-async def compare(message: Message, state: FSMContext):
-    await state.clear()
-    await state.set_state(Flow.assistant)
-    await message.answer("🤖 Qaysi mahsulotlarni solishtiray? Masalan: Samsung va Redmi telefonlarini solishtir.\nSavolni yuboring; keyin davom ettirishingiz mumkin. /cancel — chiqish.")
-
 
 @router.message(F.text.in_({"👤 Profilim", "⚙️ Sozlamalar"}))
 async def profile(message: Message, state: FSMContext, api: Api):
@@ -431,7 +433,7 @@ async def bonuses(message: Message, state: FSMContext):
     await message.answer("Referral bonuslari va Premium obuna bu versiyada ulanmagan. Hozir to‘lov olinmaydi va bonus hisoblanmaydi.")
 
 
-@router.message(F.photo | (F.text == "📸 Rasm bilan qidirish"))
+@router.message(F.photo)
 async def photo(message: Message, state: FSMContext):
     await state.set_state(Flow.search)
     await message.answer("Rasmni AI bilan aniqlash hali ulanmagan. Mahsulot modeli yoki nomini yozing; katalogdan qidiraman.")

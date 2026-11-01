@@ -161,3 +161,15 @@ def test_invalid_basket_state_keeps_retry_and_does_not_call_api():
     api.call.assert_not_called()
     state.clear.assert_not_called()
     state.set_state.assert_awaited_once_with(bot_main.Flow.basket)
+
+def test_unfinished_features_are_hidden_from_telegram_keyboard():
+    from bot.main import MENU, keyboard
+    labels = [label for row in MENU for label in row]
+    assert "🤖 AI xarid yordamchisi" in labels
+    assert not any(label in labels for label in (
+        "📸 Rasm bilan qidirish",
+        "⚖️ AI bilan solishtirish",
+        "⚖️ Mahsulot solishtirish",
+        "📷 Shtrix-kod",
+    ))
+    assert [button.text for row in keyboard.keyboard for button in row] == labels
